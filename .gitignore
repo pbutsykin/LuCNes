@@ -1,0 +1,11 @@
+*.cache
+*.log
+*.exe
+*.dll
+*.lib
+*.obj
+*.stackdump
+*.nes
+lucnes
+lucnes.dbg
+lucnes_test

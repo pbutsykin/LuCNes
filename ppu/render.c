@@ -1,0 +1,565 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Copyright (C) 2021 Pavel Butsykin
+ */
+#define CNES_PPU
+#define PPU_RENDER
+
+#include <utils/utils.h>
+#include <video/interface.h>
+
+#include "ppu.h"
+
+#define PPU_TILE_COLUMN_NUM (1 << PPU_TILE_COLUMN_BIT)
+#define PPU_TILE_ROW_NUM    (1 << PPU_TILE_ROW_BIT)
+#define PPU_TILE_ROW16_NUM  (PPU_TILE_ROW_NUM << 1)
+
+#define PPU_COLORS_PER_PALETTE 4
+#define PPU_BACKGROUND_PALETTE_NUM 4
+#define PPU_SPRITE_PALETTE_NUM 4
+
+#define PPU_SPRITES_PER_LINE 8
+
+enum {
+    TILE_PER_ROW_BIT = 5,
+    TILE_PER_ROW = (1 << TILE_PER_ROW_BIT),
+    TILE_PER_ROW_MASK = TILE_PER_ROW - 1,
+    TILE_COLUMN_MASK = PPU_TILE_COLUMN_NUM - 1,
+    TILE_ROW_MASK = PPU_TILE_ROW_NUM - 1,
+    PPU_TILE_ROW16_MASK = PPU_TILE_ROW16_NUM - 1,
+}; /* Tile constants */
+
+typedef struct _PPUTile {
+    uint8_t low[PPU_TILE_ROW_NUM];
+    uint8_t high[PPU_TILE_ROW_NUM];
+} __attribute__((packed)) PPUTile;
+
+typedef struct _PPUPalette {
+    union {
+        uint8_t unique;
+        uint8_t colors[PPU_COLORS_PER_PALETTE];
+    };
+} __attribute__((packed)) PPUPalette;
+
+typedef struct _PPUPaletteTable {
+    union {
+        uint8_t uniBgColor;
+        PPUPalette bgPallets[PPU_BACKGROUND_PALETTE_NUM];
+    };
+    PPUPalette spPallets[PPU_SPRITE_PALETTE_NUM];
+} __attribute__((packed)) PPUPaletteTable;
+
+typedef struct _PPUNameTable {
+    uint8_t tiles[PPU_NAMETAB_SIZE - PPU_ATTRTAB_SIZE];
+    uint8_t attrs[PPU_ATTRTAB_SIZE];
+} __attribute__((packed)) PPUNameTable;
+
+typedef struct _SpriteObj {
+    uint8_t y;
+    union {
+        uint8_t idx8x8;
+        struct {
+            uint8_t ptNum:1;   /* bit 0 of tile byte selects pattern table. */
+            uint8_t idx8x16:7; /* bits 1-7 give the top tile index. */
+        };
+    } tile;
+    union {
+        uint8_t attr;
+        struct {
+            uint8_t paletteIdx:2;
+            uint8_t unimplemented:3; /* The three unimplemented bits of each sprite's byte 2 do not
+                                      * exist in the PPU and always read back as 0 */
+            enum {
+                SPRITE_PRIORITY_FOREGROUND = 0,
+                SPRITE_PRIORITY_BACKGROUND = 1,
+            } __attribute__((packed)) priority:1;
+            uint8_t flipH:1;    /* Flip sprite horizontally */
+            uint8_t flipV:1;    /* Flip sprite vertically */
+        };
+    };
+    uint8_t x;
+} __attribute__((packed)) SpriteObj;
+
+#define PPU_SPRITE_SIZE_MASK 3
+#define PPU_SPRITE_SIZE_BIT  2
+#define PPU_SPRITE_SIZE (1<< PPU_SPRITE_SIZE_BIT)
+
+StaticAssert(sizeof(SpriteObj) == PPU_SPRITE_SIZE, "Sprite object size cannot be changed.");
+
+
+
+inline static uint8_t GetTilePixel(PPUTile* const tile, const uint8_t row, const uint8_t shift)
+{
+    return (((tile->high[row] >> shift) & 1) << 1) | ((tile->low[row] >> shift) & 1);
+}
+
+static inline RGBColor* PpuColorConvert(PPUPalette* const palette, const uint8_t colorIdx)
+{
+static RGBColor PPUPaletteRGBMap[] = {
+    {0x80, 0x80, 0x80}, {0x00, 0x3D, 0xA6}, {0x00, 0x12, 0xB0}, {0x44, 0x00, 0x96}, {0xA1, 0x00, 0x5E},
+    {0xC7, 0x00, 0x28}, {0xBA, 0x06, 0x00}, {0x8C, 0x17, 0x00}, {0x5C, 0x2F, 0x00}, {0x10, 0x45, 0x00},
+    {0x05, 0x4A, 0x00}, {0x00, 0x47, 0x2E}, {0x00, 0x41, 0x66}, {0x00, 0x00, 0x00}, {0x05, 0x05, 0x05},
+    {0x05, 0x05, 0x05}, {0xC7, 0xC7, 0xC7}, {0x00, 0x77, 0xFF}, {0x21, 0x55, 0xFF}, {0x82, 0x37, 0xFA},
+    {0xEB, 0x2F, 0xB5}, {0xFF, 0x29, 0x50}, {0xFF, 0x22, 0x00}, {0xD6, 0x32, 0x00}, {0xC4, 0x62, 0x00},
+    {0x35, 0x80, 0x00}, {0x05, 0x8F, 0x00}, {0x00, 0x8A, 0x55}, {0x00, 0x99, 0xCC}, {0x21, 0x21, 0x21},
+    {0x09, 0x09, 0x09}, {0x09, 0x09, 0x09}, {0xFF, 0xFF, 0xFF}, {0x0F, 0xD7, 0xFF}, {0x69, 0xA2, 0xFF},
+    {0xD4, 0x80, 0xFF}, {0xFF, 0x45, 0xF3}, {0xFF, 0x61, 0x8B}, {0xFF, 0x88, 0x33}, {0xFF, 0x9C, 0x12},
+    {0xFA, 0xBC, 0x20}, {0x9F, 0xE3, 0x0E}, {0x2B, 0xF0, 0x35}, {0x0C, 0xF0, 0xA4}, {0x05, 0xFB, 0xFF},
+    {0x5E, 0x5E, 0x5E}, {0x0D, 0x0D, 0x0D}, {0x0D, 0x0D, 0x0D}, {0xFF, 0xFF, 0xFF}, {0xA6, 0xFC, 0xFF},
+    {0xB3, 0xEC, 0xFF}, {0xDA, 0xAB, 0xEB}, {0xFF, 0xA8, 0xF9}, {0xFF, 0xAB, 0xB3}, {0xFF, 0xD2, 0xB0},
+    {0xFF, 0xEF, 0xA6}, {0xFF, 0xF7, 0x9C}, {0xD7, 0xE8, 0x95}, {0xA6, 0xED, 0xAF}, {0xA2, 0xF2, 0xDA},
+    {0x99, 0xFF, 0xFC}, {0xDD, 0xDD, 0xDD}, {0x11, 0x11, 0x11}, {0x11, 0x11, 0x11}
+};
+
+    LogPrintAssert(colorIdx < PPU_COLORS_PER_PALETTE, "Invalid color index for palette\n");
+
+    return &PPUPaletteRGBMap[palette->colors[colorIdx]];
+}
+
+static inline uint8_t attrIdxFromNameTableIdx(const uint16_t ntIdx)
+{
+#define TILES_PER_ATTR_BLOCK_ROW 128
+#define ATTR_BLOCK_ROW_MASK ~(TILES_PER_ATTR_BLOCK_ROW - 1)
+#define ATTR_BLOCK_ROW_BIT 4
+#define ATTR_BLOCK_COLUMN_BIT 2
+
+    return ((ntIdx & ATTR_BLOCK_ROW_MASK) >> ATTR_BLOCK_ROW_BIT) +
+           ((ntIdx & TILE_PER_ROW_MASK) >> ATTR_BLOCK_COLUMN_BIT);
+}
+
+static inline uint8_t PaletteIdxFromAttr(const uint8_t attr, const uint16_t ntIdx)
+{
+#define TILES_ATTR_BLOCK_ROW_MASK  (TILES_PER_ATTR_BLOCK_ROW - 1)
+#define TILES_METATILE_COLUMN_MASK 3
+
+#define METATILE_V_BIT 6
+#define METATILE_H_BIT 1
+#define METATILE_MASK  3 /* 1 attribute has 4 meta tiles, 0b11 mask is used to take one */
+
+    const uint8_t metaTileIdx = (((ntIdx & TILES_ATTR_BLOCK_ROW_MASK) >> METATILE_V_BIT) << 1) |
+                                ((ntIdx & TILES_METATILE_COLUMN_MASK) >> METATILE_H_BIT);
+    const uint8_t attrShift = metaTileIdx << 1;
+
+    return (attr >> attrShift) & METATILE_MASK;
+}
+
+static inline uint8_t getBgPaletteIdx(PPUNameTable* const nt, uint16_t const ntIdx)
+{
+    const uint8_t atrIdx = attrIdxFromNameTableIdx(ntIdx);
+
+    return PaletteIdxFromAttr(nt->attrs[atrIdx], ntIdx);
+}
+
+static inline PPUPalette* LookupBgPalette(LuCNesPPU* const ppu, const uint8_t idx)
+{
+    LogPrintAssert(idx < PPU_BACKGROUND_PALETTE_NUM, "Invalid back ground palette index: %u\n", idx);
+
+    return &ppu->mmap.paletteTable->bgPallets[idx];
+}
+
+static inline PPUPalette* LookupSpPalette(LuCNesPPU* const ppu, const uint8_t idx)
+{
+    LogPrintAssert(idx < PPU_SPRITE_PALETTE_NUM, "Invalid sprite palette index: %u\n", idx);
+
+    return &ppu->mmap.paletteTable->spPallets[idx];
+}
+
+/* Toggling rendering takes effect approximately 3-4 dots after the write.
+ * https://www.nesdev.org/wiki/PPU_registers#PPUMASK
+ */
+static inline bool PpuRenderingEnabled(const LuCNesPPU* ppu)
+{
+    const uint16_t currentDot = ppu->render.lastDot;
+
+    if (likely(!ppu->render.rendToggleDot) || currentDot - ppu->render.rendToggleDot > 3)
+        return ppu->reg->mask & PPU_RENDERING_ENABLED;
+
+    LogPrintDbg("Rendering toggle suppressed. Delay: %d\n", currentDot - ppu->render.rendToggleDot);
+
+    return !(ppu->reg->mask & PPU_RENDERING_ENABLED);
+}
+
+static void SpriteZeroHitHandler(LuCNesPPU* ppu, const uint8_t pixelX)
+{
+    if (ppu->reg->status & PPU_SPRITE0_MASK)
+        return;
+
+    /* https://wiki.nesdev.com/w/index.php?title=PPU_OAM#Sprite_zero_hits
+     * Sprite 0 hit does not happen:
+     * At x=255, for an obscure reason related to the pixel pipeline.
+     */
+    if (pixelX == 255)
+        return;
+
+    /* Sprite 0 hit does not happen: At x=0 to x=7 if the left-side clipping window is enabled. */
+    if ((!(ppu->reg->mask & PPU_BACKGROUND_LEFT_ENABLE_MASK) ||
+         !(ppu->reg->mask & PPU_SPRITE_LEFT_ENABLE_MASK)) &&
+        pixelX < PPU_MASK_LEFTMOST_PIXELS)
+    {
+        return;
+    }
+
+    LogPrintDbg("ZeroHit: x: %u\n", pixelX);
+    ppu->reg->status |= PPU_SPRITE0_MASK;
+}
+
+typedef struct _RenderState {
+    PPUTile* bgPatternTable;
+    PPUTile* spPatternTable;
+} RenderState;
+
+typedef struct _PixelDataSet {
+    uint8_t colorIdx;
+    PPUPalette* palette;
+    bool foregroundFlag; /* Unused for background.
+                          * XXX: Fix useless move in GetBackgroundPixel().
+                          */
+} PixelDataSet;
+
+static inline void IRegIncX(VRAMAddrReg* current)
+{
+    uint8_t tileX = current->tileX + 1;
+
+    current->tileX = tileX & TILE_PER_ROW_MASK;
+    current->ntX ^= !!(tileX & TILE_PER_ROW);
+}
+
+static inline void IRegIncY(VRAMAddrReg* current)
+{
+    uint8_t fineY = current->fineY + 1;
+
+    if (unlikely(fineY & PPU_TILE_ROW_NUM)) {
+        uint8_t tileY = (current->tileY + 1) & TILE_PER_ROW_MASK;
+
+        if (unlikely(tileY == PPU_FRAME_HEIGHT >> PPU_TILE_COLUMN_BIT)) {
+            tileY = 0;
+            current->ntY ^= 1;
+        }
+        current->tileY = tileY;
+    }
+    current->fineY = fineY & TILE_ROW_MASK;
+}
+
+static PixelDataSet GetBackgroundPixel(LuCNesPPU* ppu, RenderState* rs, const uint8_t x)
+{
+    VRAMAddrReg cur = ppu->iRegs.cur;
+    if ((x ^ (x + ppu->iRegs.fineX)) & ~TILE_COLUMN_MASK)
+        IRegIncX(&cur);
+
+    PPUNameTable* nt = ppu->mmap.ntMirrTable[cur.nt];
+    uint16_t ntIdx = (ppu->iRegs.cur.tileY << TILE_PER_ROW_BIT) + (cur.tileX & TILE_PER_ROW_MASK);
+
+    uint16_t tileIdx = nt->tiles[ntIdx];
+    PPUTile* tile = &rs->bgPatternTable[tileIdx];
+
+    uint8_t pixelColorIdx = GetTilePixel(tile, ppu->iRegs.cur.fineY,
+                                               ~(x + ppu->iRegs.fineX) & TILE_COLUMN_MASK);
+    return (PixelDataSet) {
+        .colorIdx = pixelColorIdx,
+        .palette = LookupBgPalette(ppu, pixelColorIdx ? getBgPaletteIdx(nt, ntIdx) : 0),
+    };
+}
+
+static PixelDataSet GetSpritePixel(LuCNesPPU* ppu, RenderState* rs,
+                                     const uint8_t y, const uint8_t x, bool bgTransparent)
+{
+    uint64_t lineSprites = ppu->render.lineSprites;
+    uint8_t spIdx;
+
+    while ((spIdx = FindFirstBit64(lineSprites))) {
+        SpriteObj* sprite;
+        PPUTile* tile;
+        const uint8_t spriteHeight = ppu->reg->ctrl & PPU_SPRITE_HEIGHT_MASK ?
+                                        PPU_TILE_ROW16_NUM : PPU_TILE_ROW_NUM;
+        spIdx--;
+        lineSprites &= ~(1ULL << spIdx); /* XXX: uint64_t ClearBit64(uint64_t data, uint8_t bit) */
+
+        sprite = &ppu->sprites[spIdx];
+        if (x >= sprite->x + PPU_TILE_COLUMN_NUM || x < sprite->x)
+            continue;
+
+        LogPrintAssert((y - (sprite->y + 1)) < spriteHeight,
+                       "Wrong sprite entry (sprite->y: %u) for curren line: %u\n", sprite->y, y);
+
+        uint8_t tile_y = y - (sprite->y + 1); /* Sprites are displayed 1 line later than OAM y val. */
+        uint8_t tile_x = ~(x - sprite->x) & TILE_COLUMN_MASK;
+
+        if (sprite->flipV)
+            tile_y = (spriteHeight - 1) - tile_y;
+
+        if (sprite->flipH)
+            tile_x = ~tile_x & TILE_COLUMN_MASK;
+
+        if (unlikely(ppu->reg->ctrl & PPU_SPRITE_HEIGHT_MASK)) {
+            PPUTile* ptTable = ppu->mmap.ptTileMirrTable[sprite->tile.ptNum];
+            uint8_t topTileIdx = sprite->tile.idx8x16 << 1;
+
+            /* An 8x16 tile is just two 8x8 tiles. So here, within the 8x16 tile, we pick either
+             * the first or the second 8x8 tile and convert tile_y into 8 row form so we can reuse
+             * GetTilePixel().
+             */
+            tile = &ptTable[topTileIdx + (tile_y >> PPU_TILE_ROW_BIT)];
+            tile_y &= TILE_ROW_MASK;
+        } else
+            tile = &rs->spPatternTable[sprite->tile.idx8x8];
+
+        uint8_t pixelColorIdx = GetTilePixel(tile, tile_y, tile_x);
+        if (!pixelColorIdx) /* Transparent pixel */
+            continue;
+
+        if (!spIdx && !bgTransparent)
+            SpriteZeroHitHandler(ppu, x);
+
+        return (PixelDataSet) {
+            .colorIdx = pixelColorIdx,
+            .palette = LookupSpPalette(ppu, sprite->paletteIdx),
+            .foregroundFlag = (sprite->priority == SPRITE_PRIORITY_FOREGROUND),
+        };
+    }
+
+    return (PixelDataSet) {
+        .colorIdx = 0,
+    };
+}
+
+static inline void DrawPixelColor(LuCNesPPU* const ppu, const uint8_t y, const uint8_t x,
+                                  PixelDataSet* const pixel)
+{
+     RGBColor* rgb = PpuColorConvert(pixel->palette, pixel->colorIdx);
+     VideoSetPixel(ppu->video, y, x, rgb);
+}
+
+static inline void DrawBackDropColor(LuCNesPPU* const ppu, const uint8_t y, const uint8_t x)
+{
+    PixelDataSet backdrop = {
+        .palette = LookupBgPalette(ppu, 0),
+        .colorIdx = 0,
+    };
+    DrawPixelColor(ppu, y, x, &backdrop);
+}
+
+static void PpuRenderPixel(LuCNesPPU* const ppu, RenderState* const rs, const uint8_t y, const uint8_t x)
+{
+    bool bgEnabled = (ppu->reg->mask & PPU_BACKGROUND_ENABLE_MASK) &&
+                     (ppu->reg->mask & PPU_BACKGROUND_LEFT_ENABLE_MASK || x > PPU_MASK_LEFTMOST_PIXELS - 1);
+    bool spEnabled = (ppu->reg->mask & PPU_SPRITE_ENABLE_MASK) &&
+                     (ppu->reg->mask & PPU_SPRITE_LEFT_ENABLE_MASK || x > PPU_MASK_LEFTMOST_PIXELS - 1);
+
+    if (likely(bgEnabled)) {
+        PixelDataSet bgPixel = GetBackgroundPixel(ppu, rs, x);
+
+        if (spEnabled) {
+            PixelDataSet spPixel = GetSpritePixel(ppu, rs, y, x, !bgPixel.colorIdx);
+
+            if (spPixel.colorIdx && (!bgPixel.colorIdx || spPixel.foregroundFlag))
+                return DrawPixelColor(ppu, y, x, &spPixel);
+        }
+        return DrawPixelColor(ppu, y, x, &bgPixel);
+    } else if (spEnabled) {
+        PixelDataSet spPixel = GetSpritePixel(ppu, rs, y, x, true);
+        if (spPixel.colorIdx)
+            return DrawPixelColor(ppu, y, x, &spPixel);
+    }
+    DrawBackDropColor(ppu, y, x);
+}
+
+static uint64_t ScanSpritesForLine(LuCNesPPU* ppu, const uint8_t y)
+{
+    PPUReg* reg = ppu->reg;
+    SpriteObj* sprites = ppu->sprites;
+    uint64_t foundSprites = 0;
+    uint8_t oamIdxShift = reg->oam.addr >> PPU_SPRITE_SIZE_BIT, spritesNum = 0;
+    const uint8_t spriteHeight = reg->ctrl & PPU_SPRITE_HEIGHT_MASK ?
+                                    PPU_TILE_ROW16_NUM : PPU_TILE_ROW_NUM;
+
+    if (unlikely(y >= PPU_FRAME_HEIGHT))
+        return 0;
+
+    LogPrintAssert(!(reg->mask & PPU_SPRITE_ENABLE_MASK) || !(reg->oam.addr & PPU_SPRITE_SIZE_MASK),
+        "Unalligned OAMADDR %x\n", reg->oam.addr);
+
+    for (uint8_t spIdx = 0; spIdx < (PPU_OAM_SIZE >> PPU_SPRITE_SIZE_BIT) - oamIdxShift; spIdx++) {
+        SpriteObj* sprite = &sprites[spIdx + oamIdxShift];
+
+        if (sprite->y >= PPU_FRAME_HEIGHT)
+            continue;
+
+        if (y > sprite->y + (spriteHeight - 1) || y < sprite->y)
+            continue;
+
+        /* XXX: Sprite overflow has hardware bug. Is it worth emulating this bug as well?
+         * https://wiki.nesdev.org/w/index.php?title=PPU_sprite_evaluation#Sprite_overflow_bug
+         */
+        if (PpuRenderingEnabled(ppu) && ++spritesNum > PPU_SPRITES_PER_LINE) {
+            reg->status |= PPU_SPRITE_OVERFLOW_MASK;
+            LogPrintDbg("Sprite Overflow: y: %u, x: %u\n", sprite->y, sprite->x);
+            break;
+        }
+        foundSprites |= (1ULL << spIdx);
+    }
+    return foundSprites;
+}
+
+static void VisibleScanLineNoRender(LuCNesPPU* ppu)
+{
+    if (ppu->dot > PPU_PIXELS_PER_LINE)
+        return;
+
+    // assert vadrr > $3F00 && vaddr < $3FFF
+    /* https://wiki.nesdev.com/w/index.php/PPU_palettes#The_background_palette_hack
+     * XXX: implement background palette hack
+     */
+}
+
+static inline void ResetOAMAddr(PPUReg* reg)
+{
+    if (likely(reg->mask & PPU_RENDERING_ENABLED))
+        reg->oam.addr = 0;
+}
+
+#define PPU_RENDER_TILE_PIXELS 0 ... 255
+#define PPU_RENDER_INC_Y       256
+#define PPU_RENDER_ASSIGN_X    257
+#define PPU_RENDER_FETCH       258 ... PPU_CYCLES_PER_LINE
+#define PPU_OAMADDR_SET_ZERO_BEGIN 257
+#define PPU_OAMADDR_SET_ZERO_END   320
+
+void PpuVisibleLineRender(LuCNesPPU* ppu)
+{
+    PPUReg* reg = ppu->reg;
+
+    do {
+        LogPrintAssert(ppu->render.lastDot <= ppu->dot,
+            "Invalid dot state: dot: %u, last: %u\n", ppu->dot, ppu->render.lastDot);
+
+        switch (ppu->render.lastDot) {
+            case PPU_RENDER_TILE_PIXELS: {
+                RenderState rs = {
+                    .bgPatternTable = ppu->mmap.ptTileMirrTable[!!(reg->ctrl & PPU_BACKGROUND_TILE_MASK)],
+                    .spPatternTable = ppu->mmap.ptTileMirrTable[!!(reg->ctrl & PPU_SPRITE_TILE_MASK)],
+                };
+                uint16_t nextCycleStage = MIN(PPU_RENDER_INC_Y, ppu->dot);
+
+                for (; ppu->render.lastDot < nextCycleStage; ppu->render.lastDot++) {
+                    if (unlikely(!PpuRenderingEnabled(ppu))) {
+                        VisibleScanLineNoRender(ppu);
+                        if (likely(!ppu->render.rendToggleDot))
+                            ppu->render.lastDot = nextCycleStage;
+                        else
+                            ppu->render.lastDot++;
+                        break;
+                    }
+                    if (ppu->render.lastDot && !(ppu->render.lastDot & TILE_COLUMN_MASK))
+                        IRegIncX(&ppu->iRegs.cur);
+
+                    PpuRenderPixel(ppu, &rs, ppu->scanLine, ppu->render.lastDot);
+                }
+            }
+                break;
+            case PPU_RENDER_INC_Y:
+                /* Sprite data is delayed by one scanline and sprites are never displayed on the
+                 * first line. However, OAM stores sprite Y starting at 0, so scanning on scanLine
+                 * 0 is fine. The delay is emulated in GetSpritePixel by applying y + 1 offset.
+                 */
+                if (likely(PpuRenderingEnabled(ppu))) {
+                    ppu->render.lineSprites = ScanSpritesForLine(ppu, ppu->scanLine);
+                    IRegIncY(&ppu->iRegs.cur);
+                }
+                ppu->render.lastDot++;
+                break;
+            case PPU_RENDER_ASSIGN_X:
+                if (likely(PpuRenderingEnabled(ppu))) {
+                    ppu->iRegs.cur.tileX = ppu->iRegs.tmp.tileX;
+                    ppu->iRegs.cur.ntX = ppu->iRegs.tmp.ntX;
+                    reg->oam.addr = 0;
+                }
+                ppu->render.lastDot++;
+                break;
+            case PPU_RENDER_FETCH:
+                /* XXX: (321 - 335) On a real device this part is used to fetch first two tiles
+                 * on the next scan line.
+                 */
+                if (ppu->render.lastDot <= PPU_OAMADDR_SET_ZERO_END)
+                    ResetOAMAddr(reg);
+
+                ppu->render.lastDot = ppu->dot;
+                return;
+            default:
+                LogPrintAssert(0, "Invalid lastDot value: %u\n", ppu->render.lastDot);
+        }
+    } while (ppu->render.lastDot != ppu->dot);
+}
+
+#define PPU_PRERENDER_ZERO_CYCLE  0
+#define PPU_PRERENDER_CLEAR_FLAGS 1
+#define PPU_PRERENDER_UNUSED_TILE_FETCH 2 ... 256
+#define PPU_PRERENDER_ASSIGN_X          257
+#define PPU_PRERENDER_IDLE_CYCLES       258 ... 279
+#define PPU_PRERENDER_ASSIGN_Y_BEGIN 280
+#define PPU_PRERENDER_ASSIGN_Y_END   304
+#define PPU_PRERENDER_ASSIGN_Y       PPU_PRERENDER_ASSIGN_Y_BEGIN ... PPU_PRERENDER_ASSIGN_Y_END
+#define PPU_PRERENDER_ODD_SKIP       338 /* https://www.nesdev.org/wiki/PPU_frame_timing#Even/Odd_Frames */
+#define PPU_PRERENDER_FETCH          PPU_PRERENDER_ASSIGN_Y_END + 1 ... PPU_PRERENDER_ODD_SKIP - 1
+#define PPU_PRERENDER_DUMMY_FETCH    PPU_PRERENDER_ODD_SKIP + 1 ... PPU_CYCLES_PER_LINE
+
+void PpuPreRenderLine(LuCNesPPU* ppu)
+{
+    PPUReg* reg = ppu->reg;
+
+    do {
+        switch (ppu->render.lastDot) {
+            case PPU_PRERENDER_ZERO_CYCLE:
+                ppu->render.lastDot++;
+                break;
+            case PPU_PRERENDER_CLEAR_FLAGS:
+                reg->status &= ~PPU_VBLANK_MASK;
+                reg->status &= ~PPU_SPRITE0_MASK;
+                reg->status &= ~PPU_SPRITE_OVERFLOW_MASK;
+
+                ppu->render.lineSprites = 0;
+                ppu->render.lastDot++;
+                break;
+            case PPU_PRERENDER_UNUSED_TILE_FETCH:
+                ppu->render.lastDot = MIN(PPU_PRERENDER_ASSIGN_X, ppu->dot);
+                break;
+            case PPU_PRERENDER_ASSIGN_X:
+                if (likely(reg->mask & PPU_RENDERING_ENABLED)) {
+                    ppu->iRegs.cur.tileX = ppu->iRegs.tmp.tileX;
+                    ppu->iRegs.cur.ntX = ppu->iRegs.tmp.ntX;
+                    reg->oam.addr = 0;
+                }
+                ppu->render.lastDot++;
+                break;
+            case PPU_PRERENDER_IDLE_CYCLES:
+                ppu->render.lastDot = MIN(PPU_PRERENDER_ASSIGN_Y_BEGIN, ppu->dot);
+                ResetOAMAddr(reg);
+                break;
+            case PPU_PRERENDER_ASSIGN_Y:
+                if (likely(reg->mask & PPU_RENDERING_ENABLED)) {
+                    ppu->iRegs.cur.tileY = ppu->iRegs.tmp.tileY;
+                    ppu->iRegs.cur.ntY = ppu->iRegs.tmp.ntY;
+                    ppu->iRegs.cur.fineY = ppu->iRegs.tmp.fineY;
+                    reg->oam.addr = 0;
+                }
+                ppu->render.lastDot = MIN(PPU_PRERENDER_ASSIGN_Y_END + 1, ppu->dot);
+                break;
+            case PPU_PRERENDER_FETCH:
+                /* XXX: (321 - 335) On a real device this part is used to fetch first two tiles
+                 * on the next scan line.
+                 */
+                if (ppu->render.lastDot <= PPU_OAMADDR_SET_ZERO_END)
+                    ResetOAMAddr(reg);
+
+                ppu->render.lastDot = MIN(PPU_PRERENDER_ODD_SKIP, ppu->dot);
+                break;
+            case PPU_PRERENDER_ODD_SKIP:
+                if (ppu->oddFrame && (reg->mask & PPU_RENDERING_ENABLED))
+                    ppu->dot++; /* Skip last idle ppu cycle for odd frame */
+                fallthrough;
+            case PPU_PRERENDER_DUMMY_FETCH:
+                ppu->render.lastDot = ppu->dot;
+                return;
+            default:
+                LogPrintAssert(0, "Invalid lastDot value: %u\n", ppu->render.lastDot);
+        }
+    } while (ppu->render.lastDot != ppu->dot);
+}
