@@ -6,16 +6,12 @@
 
 typedef struct _VideoBackend VideoBackend;
 
-typedef struct _RGBColor {
-    uint8_t r, g, b;
-} __attribute__((packed)) RGBColor;
-
 VideoBackend* VideoInit(const uint16_t width, const uint16_t height);
 
 void VideoFree(VideoBackend* video);
 
 void VideoFrameFlush(VideoBackend* video);
 
-void VideoSetPixel(VideoBackend* video, const uint8_t y, const uint8_t x, RGBColor* const color);
+void VideoSetPixel(VideoBackend* video, const uint8_t y, const uint8_t x, const uint8_t color);
 
 #endif /* __CNES_VIDEO_INTERFACE_ */
