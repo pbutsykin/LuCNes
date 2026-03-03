@@ -4,6 +4,7 @@ CC = gcc
 BUILD ?= release
 LUCNES_BIN = lucnes
 LUCNES_TEST_BIN = lucnes_test
+VIDEO_BACKEND ?= sdl2# sdl2, vt, empty
 AUDIO_BACKEND ?= sdl2# sdl2, pipe, empty
 AUDIO_RL ?= 0
 
@@ -27,7 +28,7 @@ SRC_PPU   = ppu/ppu.c ppu/render.c
 SRC_APU   = apu/apu.c
 SRC_CTL   = controller/controller.c
 SRC_MAP   = mapper/mapper.c mapper/axrom.c mapper/cnrom.c
-SRC_VIDIO = video/sdl2_backend.c
+SRC_VIDIO = video/$(VIDEO_BACKEND)_backend.c
 SRC_AUDIO = audio/$(AUDIO_BACKEND)_backend.c
 SRC_INPUT = input/sdl2_backend.c
 
@@ -44,6 +45,11 @@ SOURCES_TEST = tests/test.c $(SOURCES) video/empty_backend.c audio/empty_backend
 INCLUDE = -I`pwd` -I`pwd`/utils `pkg-config --cflags sdl2`
 
 LIBS = `pkg-config --libs sdl2`
+
+ifeq ($(VIDEO_BACKEND),vt)
+    LIBS += video/vtrenderlib/libvtrenderlib.a
+    LIBS += -lm
+endif
 
 ###############
 RED=\033[0;31m
@@ -69,6 +75,9 @@ all: clean lucnes
 
 clean:
 	rm -f $(LUCNES_BIN).* $(LUCNES_BIN) $(LUCNES_TEST_BIN) $(LUCNES_TEST_BIN).*
+ifeq ($(VIDEO_BACKEND),vt)
+	$(MAKE) -C video/vtrenderlib clean
+endif
 
 test: $(LUCNES_TEST_BIN)
 	$(call run_test, ultimate_nes_cpu_test, --cpu_addr 0xc000, --start_cycle 7)
@@ -116,9 +125,12 @@ test: $(LUCNES_TEST_BIN)
 	$(call run_test, joy/count_errors_fast, --max_cycles 0x16e445)
 
 $(LUCNES_TEST_BIN):
-	$(CC) $(CFLAGS_TEST) $(INCLUDE) $(SOURCES_TEST) $(LIBS) -o $(LUCNES_TEST_BIN)
+	$(CC) $(CFLAGS_TEST) $(INCLUDE) $(SOURCES_TEST) -o $(LUCNES_TEST_BIN)
 
 lucnes: $(LUCNES_TEST_BIN)
+ifeq ($(VIDEO_BACKEND),vt)
+	$(MAKE) -C video/vtrenderlib CC="$(CC)" BUILD=$(BUILD) SANITIZERS="$(SANITIZERS)"
+endif
 	$(CC) $(CFLAGS) $(INCLUDE) $(SOURCES_MAIN) $(LIBS) -o $(LUCNES_BIN)
 ifeq ($(BUILD),release)
 	objcopy --only-keep-debug $(LUCNES_BIN) $(LUCNES_BIN).dbg

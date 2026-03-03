@@ -6,6 +6,8 @@
 *.obj
 *.stackdump
 *.nes
+*.o
+*.a
 lucnes
 lucnes.dbg
 lucnes_test
