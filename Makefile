@@ -8,6 +8,14 @@ VIDEO_BACKEND ?= sdl2# sdl2, vt, empty
 AUDIO_BACKEND ?= sdl2# sdl2, pipe, empty
 AUDIO_RL ?= 0
 
+# Backend compatibility checks
+ifeq ($(AUDIO_BACKEND),sdl2)
+ifneq ($(VIDEO_BACKEND),sdl2)
+$(error SDL2 audio backend requires SDL2 video backend. \
+VIDEO_BACKEND=$(VIDEO_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND))
+endif
+endif
+
 CFLAGS_COMMON = --std=c99 -mno-80387 -mno-sse -Wall -Wextra -Werror
 SANITIZERS = -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=all
 ifeq ($(BUILD),debug)
