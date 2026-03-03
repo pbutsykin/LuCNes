@@ -8,6 +8,20 @@ The main goal, though, was to have a lightweight, simple emulator for personal u
 
 ![BT1](.github/images/bt_3.png)
 
+## Terminal video backend (Braille)
+Build with:
+```sh
+VIDEO_BACKEND=vt AUDIO_BACKEND=pipe make
+```
+This emulator can render NES video output directly in a terminal emulator. It uses unicode braille characters to pack multiple pixels into one cell. It can also be used over ssh or on linux VT, but output quality depends on unicode rendering and braille characters support.
+
+Limitations:
+ - A Braille cell is 2x4 dots, but it effectively supports only one foreground color and one background color per cell. The backend picks the dominant color per cell, so areas with more than two colors in the same cell may show visible artifacts.
+ - Only the foreground color is set. The background stays at the terminal default. Switching the background color can help when the game background is not dark, but using multiple background colors within one frame often distorts the image even more.
+ - Output resolution is limited by the terminal window size, which may not fit standard NTSC/PAL frame sizes.
+
+![VT backend](.github/images/vt_backend.png)
+
 ## The Story Before Time
 
 This emulator is a small passion project inspired by my love for programming and retro consoles. :blue_heart:
