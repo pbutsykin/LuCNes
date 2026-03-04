@@ -3,9 +3,12 @@
  */
 #define CNES_AUDIO
 #define AUDIO_PIPE
+#define _GNU_SOURCE
 
 #include <utils/utils.h>
 #include <sys/wait.h>
+#include <signal.h>
+#include <fcntl.h>
 
 #include "interface.h"
 
