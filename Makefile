@@ -74,7 +74,12 @@ UPPER = $(shell echo '$1' | tr '[:lower:]' '[:upper:]')
 define run_test
 	@TEST_NAME="$(strip $1)"; \
 	TEST_ARGS="$(strip $2) $(strip $3) $(strip $4)"; \
-	TOUT=$$(diff <(./$(LUCNES_TEST_BIN) tests/$$TEST_NAME.nes $$TEST_ARGS) <(xzcat tests/$$TEST_NAME.trace.xz) | sed -n 2p); \
+	TOUT=$$( \
+		t1=$$(mktemp); \
+		./$(LUCNES_TEST_BIN) tests/$$TEST_NAME.nes $$TEST_ARGS >"$$t1"; \
+		xzcat tests/$$TEST_NAME.trace.xz | diff "$$t1" - | sed -n 2p;   \
+		rm -f "$$t1" \
+	); \
 	NAME=$$(echo "$$TEST_NAME" | tr '[:lower:]' '[:upper:]'); \
 	if [ -z "$$TOUT" ]; then \
 		printf "$$NAME: ${GREEN}PASSED${NC}\n"; \
