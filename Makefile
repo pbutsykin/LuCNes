@@ -6,6 +6,7 @@ LUCNES_BIN = lucnes
 LUCNES_TEST_BIN = lucnes_test
 VIDEO_BACKEND ?= sdl2# sdl2, vt, empty
 AUDIO_BACKEND ?= sdl2# sdl2, pipe, empty
+INPUT_BACKEND ?= sdl2# sdl2, empty
 AUDIO_RL ?= 0
 
 # Backend compatibility checks
@@ -19,11 +20,11 @@ endif
 CFLAGS_COMMON = --std=c99 -mno-80387 -mno-sse -Wall -Wextra -Werror
 SANITIZERS = -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=all
 ifeq ($(BUILD),debug)
-    CFLAGS = -g -Og $(CFLAGS_COMMON) -DLOG_LEVEL=3 $(SANITIZERS)
+	CFLAGS = -g -Og $(CFLAGS_COMMON) -DLOG_LEVEL=3 $(SANITIZERS)
 else ifeq ($(BUILD),release0)
-    CFLAGS = -O2 $(CFLAGS_COMMON) -DNDEBUG -DLOG_LEVEL=0
+	CFLAGS = -O2 $(CFLAGS_COMMON) -DNDEBUG -DLOG_LEVEL=0
 else
-    CFLAGS = -g -O2 $(CFLAGS_COMMON) -DNDEBUG -DLOG_LEVEL=2
+	CFLAGS = -g -O2 $(CFLAGS_COMMON) -DNDEBUG -DLOG_LEVEL=2
 endif
 
 TEST_DEFS = -DCNES_TEST
@@ -38,11 +39,11 @@ SRC_CTL   = controller/controller.c
 SRC_MAP   = mapper/mapper.c mapper/axrom.c mapper/cnrom.c
 SRC_VIDIO = video/$(VIDEO_BACKEND)_backend.c
 SRC_AUDIO = audio/$(AUDIO_BACKEND)_backend.c
-SRC_INPUT = input/sdl2_backend.c
+SRC_INPUT = input/$(INPUT_BACKEND)_backend.c
 
 ifeq ($(AUDIO_RL),1)
-    CFLAGS += -DAUDIO_RL
-    SRC_AUDIO += audio/rate_limiter.c
+	CFLAGS += -DAUDIO_RL
+	SRC_AUDIO += audio/rate_limiter.c
 endif
 
 SOURCES = $(SRC_UTILS) $(SRC_ROM) $(SRC_CPU) $(SRC_PPU) $(SRC_APU) $(SRC_CTL) $(SRC_MAP)
@@ -50,13 +51,17 @@ SOURCES = $(SRC_UTILS) $(SRC_ROM) $(SRC_CPU) $(SRC_PPU) $(SRC_APU) $(SRC_CTL) $(
 SOURCES_MAIN = main.c $(SOURCES) $(SRC_VIDIO) $(SRC_AUDIO) $(SRC_INPUT)
 SOURCES_TEST = tests/test.c $(SOURCES) video/empty_backend.c audio/empty_backend.c input/empty_backend.c
 
-INCLUDE = -I`pwd` -I`pwd`/utils `pkg-config --cflags sdl2`
+INCLUDE_COMMON = -I`pwd` -I`pwd`/utils
+INCLUDE = $(INCLUDE_COMMON)
 
-LIBS = `pkg-config --libs sdl2`
+ifneq (,$(filter sdl2,$(VIDEO_BACKEND) $(AUDIO_BACKEND) $(INPUT_BACKEND)))
+	INCLUDE += $(shell pkg-config --cflags sdl2)
+	LIBS += $(shell pkg-config --libs sdl2)
+endif
 
 ifeq ($(VIDEO_BACKEND),vt)
-    LIBS += video/vtrenderlib/libvtrenderlib.a
-    LIBS += -lm
+	LIBS += video/vtrenderlib/libvtrenderlib.a
+	LIBS += -lm
 endif
 
 ###############
@@ -133,7 +138,7 @@ test: $(LUCNES_TEST_BIN)
 	$(call run_test, joy/count_errors_fast, --max_cycles 0x16e445)
 
 $(LUCNES_TEST_BIN):
-	$(CC) $(CFLAGS_TEST) $(INCLUDE) $(SOURCES_TEST) -o $(LUCNES_TEST_BIN)
+	$(CC) $(CFLAGS_TEST) $(INCLUDE_COMMON) $(SOURCES_TEST) -o $(LUCNES_TEST_BIN)
 
 lucnes: $(LUCNES_TEST_BIN)
 ifeq ($(VIDEO_BACKEND),vt)
