@@ -8,6 +8,7 @@ VIDEO_BACKEND ?= sdl2# sdl2, vt, empty
 AUDIO_BACKEND ?= sdl2# sdl2, pipe, empty
 INPUT_BACKEND ?= sdl2# sdl2, empty
 AUDIO_RL ?= 0
+NPROC ?= $(shell nproc --all || echo 1)
 
 # Backend compatibility checks
 ifeq ($(AUDIO_BACKEND),sdl2)
@@ -88,8 +89,58 @@ define run_test
 	fi
 endef
 
+define mktest
+ALL_TESTS += test-$(subst /,-,$(strip $1))
+test-$(subst /,-,$(strip $1)): $$(LUCNES_TEST_BIN)
+	$$(call run_test, $1, $2, $3, $4)
+endef
+
 
 all: clean lucnes
+
+$(eval $(call mktest, ultimate_nes_cpu_test, --cpu_addr 0xc000, --start_cycle 7))
+$(eval $(call mktest, cpu_interrupts/1-cli_latency, --max_cycles 0x74b46))
+
+$(eval $(call mktest, ppu_vbl_nmi/01-vbl_basics, --max_cycles 0x408cf2))
+$(eval $(call mktest, ppu_vbl_nmi/02-vbl_set_time, --max_cycles 0x515d32))
+$(eval $(call mktest, ppu_vbl_nmi/03-vbl_clear_time, --max_cycles 0x4be936))
+$(eval $(call mktest, ppu_vbl_nmi/04-nmi_control, --max_cycles 0xf04e5))
+$(eval $(call mktest, ppu_vbl_nmi/05-nmi_timing, --max_cycles 0x62a1c4))
+$(eval $(call mktest, ppu_vbl_nmi/06-suppression, --max_cycles 0x63fec0))
+$(eval $(call mktest, ppu_vbl_nmi/07-nmi_on_timing, --max_cycles 0x58a27a))
+$(eval $(call mktest, ppu_vbl_nmi/08-nmi_off_timing, --max_cycles 0x638a6a))
+$(eval $(call mktest, ppu_vbl_nmi/09-even_odd_frames, --max_cycles 0x221acb))
+$(eval $(call mktest, ppu_vbl_nmi/10-even_odd_timing, --max_cycles 0x3fa447))
+$(eval $(call mktest, ppu_sprite_overflow/Basics, --max_cycles 0x1e650))
+$(eval $(call mktest, ppu_sprite_overflow/Details, --max_cycles 0x2e175))
+$(eval $(call mktest, ppu_sprite_overflow/Emulator, --max_cycles 0x20ead))
+$(eval $(call mktest, ppu_sprite_hit/01.basics, --max_cycles 0x14d5be))
+$(eval $(call mktest, ppu_sprite_hit/02.alignment, --max_cycles 0x13ed19))
+$(eval $(call mktest, ppu_sprite_hit/03.corners, --max_cycles 0x10bec6))
+$(eval $(call mktest, ppu_sprite_hit/04.flip, --max_cycles 0xe791f))
+$(eval $(call mktest, ppu_sprite_hit/05.left_clip, --max_cycles 0x130470))
+$(eval $(call mktest, ppu_sprite_hit/06.right_edge, --max_cycles 0x104a72))
+$(eval $(call mktest, ppu_sprite_hit/07.screen_bottom, --max_cycles 0x11331c))
+$(eval $(call mktest, ppu_sprite_hit/08.double_height, --max_cycles 0xf61ca))
+$(eval $(call mktest, ppu_sprite_hit/09.timing_basics, --max_cycles 0x2b19f3))
+$(eval $(call mktest, ppu_sprite_hit/10.timing_order, --max_cycles 0x1dec5e))
+$(eval $(call mktest, ppu_sprite_hit/11.edge_timing, --max_cycles 0x1a49ba))
+
+$(eval $(call mktest, apu/1-len_ctr, --max_cycles 0x91c9c))
+$(eval $(call mktest, apu/2-len_table, --max_cycles 0x6d6f0))
+$(eval $(call mktest, apu/3-irq_flag, --max_cycles 0x91ca1))
+$(eval $(call mktest, apu/4-jitter, --max_cycles 0x91ca0))
+$(eval $(call mktest, apu/5-len_timing, --max_cycles 0x34480b))
+$(eval $(call mktest, apu/6-irq_flag_timing, --max_cycles 0xa0540))
+$(eval $(call mktest, apu/7-dmc_basics, --max_cycles 0xb6249))
+$(eval $(call mktest, apu/8-dmc_rates, --max_cycles 0xd339b))
+
+$(eval $(call mktest, submapper/3_test_1, --max_cycles 0x13843b))
+$(eval $(call mktest, submapper/3_test_2, --max_cycles 0x13843b))
+$(eval $(call mktest, submapper/7_test_1, --max_cycles 0x11b099))
+$(eval $(call mktest, submapper/7_test_2, --max_cycles 0x11b099))
+
+$(eval $(call mktest, joy/count_errors_fast, --max_cycles 0x16e445))
 
 clean:
 	rm -f $(LUCNES_BIN).* $(LUCNES_BIN) $(LUCNES_TEST_BIN) $(LUCNES_TEST_BIN).*
@@ -97,50 +148,9 @@ ifeq ($(VIDEO_BACKEND),vt)
 	$(MAKE) -C video/vtrenderlib clean
 endif
 
+.PHONY: test $(ALL_TESTS)
 test: $(LUCNES_TEST_BIN)
-	$(call run_test, ultimate_nes_cpu_test, --cpu_addr 0xc000, --start_cycle 7)
-	$(call run_test, cpu_interrupts/1-cli_latency, --max_cycles 0x74b46)
-
-	$(call run_test, ppu_vbl_nmi/01-vbl_basics, --max_cycles 0x408cf2)
-	$(call run_test, ppu_vbl_nmi/02-vbl_set_time, --max_cycles 0x515d32)
-	$(call run_test, ppu_vbl_nmi/03-vbl_clear_time, --max_cycles 0x4be936)
-	$(call run_test, ppu_vbl_nmi/04-nmi_control, --max_cycles 0xf04e5)
-	$(call run_test, ppu_vbl_nmi/05-nmi_timing, --max_cycles 0x62a1c4)
-	$(call run_test, ppu_vbl_nmi/06-suppression, --max_cycles 0x63fec0)
-	$(call run_test, ppu_vbl_nmi/07-nmi_on_timing, --max_cycles 0x58a27a)
-	$(call run_test, ppu_vbl_nmi/08-nmi_off_timing, --max_cycles 0x638a6a)
-	$(call run_test, ppu_vbl_nmi/09-even_odd_frames, --max_cycles 0x221acb)
-	$(call run_test, ppu_vbl_nmi/10-even_odd_timing, --max_cycles 0x3fa447)
-	$(call run_test, ppu_sprite_overflow/Basics, --max_cycles 0x1e650)
-	$(call run_test, ppu_sprite_overflow/Details, --max_cycles 0x2e175)
-	$(call run_test, ppu_sprite_overflow/Emulator, --max_cycles 0x20ead)
-	$(call run_test, ppu_sprite_hit/01.basics, --max_cycles 0x14d5be)
-	$(call run_test, ppu_sprite_hit/02.alignment, --max_cycles 0x13ed19)
-	$(call run_test, ppu_sprite_hit/03.corners, --max_cycles 0x10bec6)
-	$(call run_test, ppu_sprite_hit/04.flip, --max_cycles 0xe791f)
-	$(call run_test, ppu_sprite_hit/05.left_clip, --max_cycles 0x130470)
-	$(call run_test, ppu_sprite_hit/06.right_edge, --max_cycles 0x104a72)
-	$(call run_test, ppu_sprite_hit/07.screen_bottom, --max_cycles 0x11331c)
-	$(call run_test, ppu_sprite_hit/08.double_height, --max_cycles 0xf61ca)
-	$(call run_test, ppu_sprite_hit/09.timing_basics, --max_cycles 0x2b19f3)
-	$(call run_test, ppu_sprite_hit/10.timing_order, --max_cycles 0x1dec5e)
-	$(call run_test, ppu_sprite_hit/11.edge_timing, --max_cycles 0x1a49ba)
-
-	$(call run_test, apu/1-len_ctr, --max_cycles 0x91c9c)
-	$(call run_test, apu/2-len_table, --max_cycles 0x6d6f0)
-	$(call run_test, apu/3-irq_flag, --max_cycles 0x91ca1)
-	$(call run_test, apu/4-jitter, --max_cycles 0x91ca0)
-	$(call run_test, apu/5-len_timing, --max_cycles 0x34480b)
-	$(call run_test, apu/6-irq_flag_timing, --max_cycles 0xa0540)
-	$(call run_test, apu/7-dmc_basics, --max_cycles 0xb6249)
-	$(call run_test, apu/8-dmc_rates, --max_cycles 0xd339b)
-
-	$(call run_test, submapper/3_test_1, --max_cycles 0x13843b)
-	$(call run_test, submapper/3_test_2, --max_cycles 0x13843b)
-	$(call run_test, submapper/7_test_1, --max_cycles 0x11b099)
-	$(call run_test, submapper/7_test_2, --max_cycles 0x11b099)
-
-	$(call run_test, joy/count_errors_fast, --max_cycles 0x16e445)
+	@$(MAKE) --no-print-directory -j$(NPROC) -Otarget $(ALL_TESTS)
 
 $(LUCNES_TEST_BIN):
 	$(CC) $(CFLAGS_TEST) $(INCLUDE_COMMON) $(SOURCES_TEST) -o $(LUCNES_TEST_BIN)
