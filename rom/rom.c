@@ -75,7 +75,7 @@ RomDesc* LoadRomFile(char* fname)
 
     RomFmtObj* rom;
     RomDesc* rdesc;
-    MFile* file = MfileGet(fname, MFILE_TYPE_READ, MFILE_ACTION_CLOSE);
+    MFile* file = MfileGet(fname, MFILE_TYPE_READ);
     if (file == NULL) {
         return NULL;
     }

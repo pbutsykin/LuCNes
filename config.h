@@ -22,8 +22,9 @@
     #endif
 #endif /* UTILS */
 
-#ifdef ROM
-#endif /* ROM */
+#ifndef HAVE_MMAP
+#define HAVE_MMAP 1
+#endif
 
 /* Global section */
 #ifndef LOG_LEVEL

@@ -7,6 +7,10 @@
 #include <libgen.h>
 #include <utils/utils.h>
 
+#if HAVE_MMAP
+#include <sys/mman.h>
+#endif
+
 static inline uint64_t GetFileSize(int32_t fd)
 {
     off_t end = lseek(fd, 0, SEEK_END);
@@ -14,10 +18,10 @@ static inline uint64_t GetFileSize(int32_t fd)
     return (uint64_t)end;
 }
 
-MFile* MfileGet(char* path, int32_t type, bool fd_close)
+MFile* MfileGet(char* path, int32_t type)
 {
+    int fd;
     uint32_t size;
-    int32_t fd;
     MFile* file;
 
     if ((fd = open(path, type)) < 0) {
@@ -25,43 +29,47 @@ MFile* MfileGet(char* path, int32_t type, bool fd_close)
         return NULL;
     }
 
-    size = (uint32_t)GetFileSize(fd);
-    if (size == 0) {
+    if (!(size = (uint32_t)GetFileSize(fd))) {
         LogPrintErr("File is empty: \'%s\'\n", path);
-        goto fail;
+        close(fd);
+        return NULL;
     }
 
     file = MemAlloc(sizeof(*file));
     *file = (MFile) {
-        .fd = fd,
+        .size = size,
         .name = basename(path),
         .path = path,
-        .data = MemAlloc(size),
-        .close = fd_close,
     };
-    if ((int32_t)(file->size = read(fd, file->data, size)) < 0) {
-        LogPrintErr("Can't read file: \'%s\' (%s)\n", path, strerror(errno));
-        MemFree(file->data);
-        MemFree(file);
+#if HAVE_MMAP
+    file->data = mmap(NULL, file->size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (file->data == MAP_FAILED) {
+        LogPrintErr("Failed to map file: \'%s\' (%s)\n", path, strerror(errno));
         goto fail;
     }
-    LogPrintAssert(file->size == size, "file->size: %u, size: %u\n", file->size, size);
-
-    if (fd_close) {
-        close(fd);
-        file->fd = -1;
+#else
+    file->data = MemAlloc(file->size);
+    if (read(fd, file->data, file->size) != file->size) {
+        LogPrintErr("Can't read file: \'%s\' (%s)\n", path, strerror(errno));
+        MemFree(file->data);
+        goto fail;
     }
-    return file;
+#endif /* HAVE_MMAP */
 
+    close(fd);
+    return file;
 fail:
     close(fd);
+    MemFree(file);
     return NULL;
 }
 
 void MfileClose(MFile* file)
 {
-    if(!file->close)
-        close(file->fd);
+#if HAVE_MMAP
+    munmap(file->data, file->size);
+#else
     MemFree(file->data);
+#endif
     MemFree(file);
 }
