@@ -5,17 +5,21 @@
 #define UTILS_FILE
 
 #include <libgen.h>
+#include <sys/stat.h>
 #include <utils/utils.h>
 
 #if HAVE_MMAP
 #include <sys/mman.h>
 #endif
 
-static inline uint64_t GetFileSize(int32_t fd)
+static inline uint64_t GetFileSize(int fd)
 {
-    off_t end = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
-    return (uint64_t)end;
+    struct stat st;
+    if (fstat(fd, &st)) {
+        LogPrintErr("fstat failed: %s\n", strerror(errno));
+        return 0;
+    }
+    return (uint64_t)st.st_size;
 }
 
 MFile* MfileGet(char* path, int32_t type)
