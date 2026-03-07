@@ -4,13 +4,22 @@
 #define UTILS
 #define UTILS_FILE
 
-#include <libgen.h>
 #include <sys/stat.h>
 #include <utils/utils.h>
 
 #if HAVE_MMAP
 #include <sys/mman.h>
 #endif
+
+static inline const char* PathBaseName(const char* p)
+{
+    const char* base = p;
+    while (*p) {
+        if (*p++ == '/')
+            base = p;
+    }
+    return base;
+}
 
 static inline uint64_t GetFileSize(int fd)
 {
@@ -22,7 +31,7 @@ static inline uint64_t GetFileSize(int fd)
     return (uint64_t)st.st_size;
 }
 
-MFile* MfileGet(char* path, int32_t type)
+MFile* MfileGet(const char* path, int32_t type)
 {
     int fd;
     uint32_t size;
@@ -42,7 +51,7 @@ MFile* MfileGet(char* path, int32_t type)
     file = MemAlloc(sizeof(*file));
     *file = (MFile) {
         .size = size,
-        .name = basename(path),
+        .name = PathBaseName(path),
         .path = path,
     };
 #if HAVE_MMAP

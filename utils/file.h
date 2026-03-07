@@ -16,15 +16,15 @@
 typedef struct _MFile {
     uint8_t* data;
     uint32_t size;
-    char*    name;
-    char*    path;
+    const char* name;
+    const char* path;
 } MFile;
 
 #define MFILE_TYPE_READ  O_RDONLY | O_BINARY
 #define MFILE_TYPE_WRITE O_WRONLY | O_BINARY
 #define MFILE_TYPE_RW    O_RDWR   | O_BINARY
 
-MFile* MfileGet(char* path, int32_t type);
+MFile* MfileGet(const char* path, int32_t type);
 
 void MfileClose(MFile* file);
 
