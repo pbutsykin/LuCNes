@@ -23,6 +23,7 @@ typedef struct _PPUMMap {
 
     uint8_t* chrRAM;
     uint8_t* chrROM;
+    uint32_t chrSize;
 
     union {
         uint8_t* vram;

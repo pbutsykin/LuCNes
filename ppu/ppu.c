@@ -219,6 +219,11 @@ static inline uint8_t* PpuAddrLookup(LuCNesPPU* ppu)
     return memEntry->ppuAddrLookup(memEntry->ctx, ppu->iRegs.cur.addr & PPU_BASE_ADDR_MASK);
 }
 
+static inline bool PpuAddrWithinChrRom(const PPUMMap* mmap, const uint8_t* ppuAddr)
+{
+    return ppuAddr >= mmap->chrROM && ppuAddr < mmap->chrROM + mmap->chrSize;
+}
+
 static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t val, bool write)
 {
     LogPrintAssert(addr >= (uint8_t*)reg, "Wrong ppu addr: %p\n", addr);
@@ -356,9 +361,11 @@ static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t
 
             uint8_t* ppuAddr = PpuAddrLookup(ppu);
 
-            if (likely(write))
-                *ppuAddr = reg->data = val;
-            else {
+            if (likely(write)) {
+                reg->data = val;
+                if (ppu->mmap.chrRAM || likely(!PpuAddrWithinChrRom(&ppu->mmap, ppuAddr)))
+                    *ppuAddr = val;
+            } else {
                 static uint8_t internalBuff; /* post-fetch */
 
                 if (ppu->iRegs.cur.addr < PPU_PALETTE_ADDR) {
@@ -491,6 +498,7 @@ static void PpuMMapInit(RomDesc* const rdesc, MapperObj* const mapper,
 
         virtMem = mmap->vram = MemAlloc(sizeof(PPUVRamSpace));
         mmap->chrROM = rdesc->chr.data;
+        mmap->chrSize = rdesc->chr.size;
         mmap->pattern0 = GET_VCHR_SPACE_ADDR(mmap->chrROM)->PatternTable0;
         mmap->pattern1 = GET_VCHR_SPACE_ADDR(mmap->chrROM)->PatternTable1;
     } else {
@@ -500,7 +508,8 @@ static void PpuMMapInit(RomDesc* const rdesc, MapperObj* const mapper,
         LogPrintDbg("No CHR-ROM\n");
         LogPrintAssert(rdesc->chrRamSize >= KB(8), "CHR-RAM wrong size: %u.\n", rdesc->chrRamSize);
 
-        virtMem = mmap->chrRAM = MemAlloc(sizeof(PPUChrSpace) + sizeof(PPUVRamSpace));
+        mmap->chrSize = sizeof(PPUChrSpace) + sizeof(PPUVRamSpace);
+        virtMem = mmap->chrRAM = MemAlloc(mmap->chrSize);
         mmap->pattern0 = GET_VCHR_SPACE_ADDR(mmap->chrRAM)->PatternTable0;
         mmap->pattern1 = GET_VCHR_SPACE_ADDR(mmap->chrRAM)->PatternTable1;
         virtMem += sizeof(PPUChrSpace);
