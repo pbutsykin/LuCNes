@@ -486,7 +486,7 @@ static void PpuMMapInit(RomDesc* const rdesc, MapperObj* const mapper,
     uint8_t* virtMem;
 
     if (rdesc->chr.size) {
-        LogPrintAssert(rdesc->chr.size <= KB(32) && rdesc->chr.size >= KB(8),
+        LogPrintAssert(rdesc->chr.size <= MB(1) && rdesc->chr.size >= KB(8),
                        "CHR-ROM wrong size: %u.\n", rdesc->chr.size);
 
         virtMem = mmap->vram = MemAlloc(sizeof(PPUVRamSpace));
