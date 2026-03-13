@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * Copyright (C) 2026 Pavel Butsykin
+ */
 #define CNES_VIDEO
 #define VIDEO_VT
 
