@@ -34,10 +34,10 @@ typedef struct _PPUTile {
 } __attribute__((packed)) PPUTile;
 
 typedef struct _PPUPalette {
-    union {
-        uint8_t unique;
-        uint8_t colors[PPU_COLORS_PER_PALETTE];
-    };
+    struct {
+        uint8_t value:6;
+        uint8_t unused:2;
+    } colors[PPU_COLORS_PER_PALETTE];
 } __attribute__((packed)) PPUPalette;
 
 typedef struct _PPUPaletteTable {
@@ -303,7 +303,7 @@ static inline void DrawPixelColor(LuCNesPPU* const ppu, const uint8_t y, const u
 {
     LogPrintAssert(pixel->colorIdx < PPU_COLORS_PER_PALETTE, "Invalid color index for palette\n");
 
-    const uint8_t color = pixel->palette->colors[pixel->colorIdx];
+    const uint8_t color = pixel->palette->colors[pixel->colorIdx].value;
 
     VideoSetPixel(ppu->video, y, x, color);
 }
