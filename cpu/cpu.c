@@ -28,7 +28,7 @@ typedef struct _CpuSpaceEmulate {
     uint8_t SRAM[];    /* 0x6000 ... 0x7FFF (Optional) */
 } CpuSpaceEmulate;
 
-static void CpuMMapInit(const RomDesc* rdesc, const MapperObj* mapper, MMap* mmap)
+static void CpuMMapInit(const RomDesc* rdesc, MapperObj* mapper, MMap* mmap)
 {
 #define GET_VSPACE_ADDR(_P) ((CpuSpaceEmulate*)_P)
 
@@ -102,7 +102,7 @@ static inline void CpuDevMapperReload8(void* ctx, MMap* mmap __maybe_unused, uin
     CNesConnector* con = ctx;
 
     LogPrintDbg("Update bank: %d\n",  val);
-    MapperPrgBankSwitch(con, &con->rdesc->prg, addr, val);
+    MapperPrgBankSwitch(con->mapper, addr, val);
 }
 
 static inline void CpuDevMapperReload16(void* ctx, MMap* mmap, uint16_t* addr, uint16_t val)

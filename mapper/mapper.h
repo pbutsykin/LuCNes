@@ -4,8 +4,7 @@
 #ifndef __CNES_MAPPER_
 #define __CNES_MAPPER_
 
-#include <connector.h>
-
+typedef struct _CNesConnector CNesConnector;
 typedef struct _PPUMMap PPUMMap;
 
 enum {
@@ -53,17 +52,23 @@ enum PrgBankWin {
 
 #define PRG_BANK_NO_MASK ((uint32_t)-1)
 
-typedef struct _MapperObj {
+typedef struct _MapperId {
     uint8_t  id;
     uint8_t bShift;
     uint8_t pShift;
     char*   label;
 
-    void (*initMirroring)(PPUMMap* mmap, bool vertical);
-    void (*bankSwitch)(const MapperObj* mapper, CNesConnector* con, const region_t* prg, const uint8_t* addr, uint8_t val);
-} MapperObj;
+    MapperObj* (*init)(void);
+    void (*initMirroring)(MapperObj* mapper, PPUMMap* mmap, bool vertical);
+    void (*bankSwitch)(MapperObj* mapper, const uint8_t* addr, uint8_t val);
+} MapperId;
 
-MapperObj* MapperLookupById(uint8_t id);
+typedef struct _MapperObj {
+    const MapperId* id;
+    CNesConnector* con;
+    uint32_t bankMask;
+    uint8_t bank;
+} MapperObj;
 
 void MapperPrgSet32K(MMap* mmap, uint8_t* data, uint32_t mask);
 

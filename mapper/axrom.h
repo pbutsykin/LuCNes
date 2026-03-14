@@ -7,7 +7,7 @@
 #define AXROM_PRG_WIN_SIZE 15 /* Size in bits */
 #define AXROM_CHR_WIN_SIZE 0
 
-void AxRomNameTableInit(PPUMMap* mmap, bool);
-void AxRoomMapperBankSwitch(const MapperObj* mapper, CNesConnector* con, const region_t* prg, const uint8_t* addr, uint8_t val);
+void AxRomNameTableInit(MapperObj* mapper, PPUMMap* mmap, bool);
+void AxRoomMapperBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t val);
 
 #endif /* __CNES_MAPPER_AXROM_ */

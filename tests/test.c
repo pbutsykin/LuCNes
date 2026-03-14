@@ -112,7 +112,7 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    connector.mapper = MapperLookupById(connector.rdesc->mapperId);
+    connector.mapper = MapperInit(connector.rdesc->mapperId, &connector);
     assert(connector.mapper != NULL);
 
     CNesCPUTestState test = {
@@ -140,6 +140,7 @@ int main(int argc, char **argv)
     ApuFree(connector.apu);
     PpuFree(connector.ppu);
     CpuFree(connector.cpu);
+    MapperFree(connector.mapper);
     UnloadRomFile(connector.rdesc);
     return 0;
 }

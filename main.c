@@ -32,7 +32,7 @@ int main(int argc, char const *argv[])
         return ret;
     }
 
-    con.mapper = MapperLookupById(con.rdesc->mapperId);
+    con.mapper = MapperInit(con.rdesc->mapperId, &con);
     if (!con.mapper) {
         LogPrintErr("Unsupported mapper: %u\n", con.rdesc->mapperId);
         goto fail0;
@@ -40,29 +40,31 @@ int main(int argc, char const *argv[])
 
     con.cpu = CpuInit(con.rdesc, con.mapper, &con, NULL);
     if (!con.cpu)
-        goto fail0;
+        goto fail1;
 
     con.ppu = PpuInit(con.cpu, con.rdesc, con.mapper, &con);
     if (!con.ppu)
-        goto fail1;
+        goto fail2;
 
     con.apu = ApuInit(con.cpu, &con);
     if (!con.apu)
-        goto fail2;
+        goto fail3;
 
     con.ctl = ControllerInit(con.cpu, &con);
     if (!con.ctl)
-        goto fail3;
+        goto fail4;
 
     ret = CpuMainLoop(con.cpu);
 
     ControllerFree(con.ctl);
-fail3:
+fail4:
     ApuFree(con.apu);
-fail2:
+fail3:
     PpuFree(con.ppu);
-fail1:
+fail2:
     CpuFree(con.cpu);
+fail1:
+    MapperFree(con.mapper);
 fail0:
     UnloadRomFile(con.rdesc);
     return ret;

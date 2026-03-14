@@ -31,14 +31,16 @@ static inline void SingleScreenBlkSwitch(uint8_t CIRAM[MAPPER_BLK_MAX],
     nameTab[PPU_NAME_SCREEN2] = nameTab[PPU_NAME_SCREEN3] = &CIRAM[blkN << MAPPER_BLK_BITS];
 }
 
-void AxRomNameTableInit(PPUMMap* mmap, bool _ __maybe_unused)
+void AxRomNameTableInit(MapperObj* _ __maybe_unused, PPUMMap* mmap, bool __ __maybe_unused)
 {
     SingleScreenBlkSwitch(mmap->name, mmap->nameMirrTable, MAPPER_BLK0 >> MAPPER_BLK_BITS);
 }
 
-void AxRoomMapperBankSwitch(const MapperObj* mapper, CNesConnector* con, const region_t* prg,
-                            const uint8_t* addr, uint8_t bank)
+void AxRoomMapperBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t bank)
 {
+    const MapperId* id = mapper->id;
+    CNesConnector* con = mapper->con;
+    const region_t* prg = &con->rdesc->prg;
     PPUMMap* ppuMMap = PpuMMap(con->ppu);
 
     if (con->rdesc->submapper == AXROM_SUBMAPPER_BUS_CONFLICT) {
@@ -51,8 +53,8 @@ void AxRoomMapperBankSwitch(const MapperObj* mapper, CNesConnector* con, const r
     SingleScreenBlkSwitch(ppuMMap->name, ppuMMap->nameMirrTable, con->pins.CIRAM_A10);
     bank &= PRG_ROM_BANK_MASK;
 
-    LogPrintAssert((uint32_t)(bank << mapper->bShift) <= prg->size, "PRG overflow");
-    LogPrintDbg("NTable switch to %u, prg: %x\n", con->pins.CIRAM_A10, (bank << mapper->bShift));
+    LogPrintAssert((uint32_t)(bank << id->bShift) <= prg->size, "PRG overflow");
+    LogPrintDbg("NTable switch to %u, prg: %x\n", con->pins.CIRAM_A10, (bank << id->bShift));
 
-    MapperPrgSet32K(CpuMMap(con->cpu), prg->data + (bank << mapper->bShift), PRG_BANK_NO_MASK);
+    MapperPrgSet32K(CpuMMap(con->cpu), prg->data + (bank << id->bShift), PRG_BANK_NO_MASK);
 }

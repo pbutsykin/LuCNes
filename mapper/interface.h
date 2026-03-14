@@ -7,12 +7,14 @@
 typedef struct _MapperObj MapperObj;
 typedef struct _PPUMMap PPUMMap;
 
-MapperObj* MapperLookupById(uint8_t id);
 
-void MapperPrgBankInitTable(const MapperObj* mapper, MMap* mmap, const region_t* prg);
+MapperObj* MapperInit(uint8_t id, CNesConnector* con);
+void MapperFree(MapperObj* mapper);
 
-void MapperPrgBankSwitch(CNesConnector* con, const region_t* prg, const uint8_t* addr, uint8_t val);
+void MapperPrgBankInitTable(MapperObj* mapper, MMap* mmap, const region_t* prg);
 
-void MapperInitMirroring(const MapperObj* mapper, PPUMMap* mmap, bool vertical);
+void MapperPrgBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t val);
+
+void MapperInitMirroring(MapperObj* mapper, PPUMMap* mmap, bool vertical);
 
 #endif /* __CNES_MAPPER_INTERFACE_ */
