@@ -36,6 +36,10 @@ void CnRomBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t bank)
         LogPrintDbg("Bus conflict: rom=%02X, result=%02X\n", *addr, bank);
     }
 
+    if (unlikely(mapper->bank == bank))
+        return;
+
+    mapper->bank = bank;
     bank &= (con->rdesc->chr.size >> id->pShift) - 1;
     LogPrintAssert((uint32_t)(bank << id->pShift) <= con->rdesc->chr.size, "CHR overflow");
 

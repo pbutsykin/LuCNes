@@ -44,8 +44,12 @@ static void MapperBankSwitchDefault(MapperObj* mapper, const uint8_t* addr __may
     const CNesConnector* con = mapper->con;
     const region_t* prg = &con->rdesc->prg;
 
+    if (unlikely(mapper->bank == bank))
+        return;
+
     LogPrintAssert((uint32_t)(bank << id->bShift) <= prg->size, "pool overflow! prg->size: %d, bank: %d\n", prg->size, bank);
 
+    mapper->bank = bank;
     MapperPrgSet32K(CpuMMap(con->cpu), prg->data + (bank << id->bShift), mapper->bankMask);
 }
 
@@ -140,6 +144,8 @@ void MapperPrgBankInitTable(MapperObj* mapper, MMap* mmap, const region_t* prg)
 
 void MapperPrgBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t val)
 {
+    LogPrintDbg("Update bank: %d <- %d\n",  mapper->bank, val);
+
     mapper->id->bankSwitch(mapper, addr, val);
 }
 

@@ -49,6 +49,10 @@ void AxRoomMapperBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t bank
         LogPrintDbg("Bus conflict: rom=%02X, result=%02X\n", *addr, bank);
     }
 
+    if (unlikely(mapper->bank == bank))
+        return;
+
+    mapper->bank = bank;
     con->pins.CIRAM_A10 = !!(bank & CIRAM_BLK_SWITCH_MASK);
     SingleScreenBlkSwitch(ppuMMap->name, ppuMMap->nameMirrTable, con->pins.CIRAM_A10);
     bank &= PRG_ROM_BANK_MASK;

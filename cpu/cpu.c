@@ -97,11 +97,10 @@ static inline void CpuDevMemWrite16(void* _ __maybe_unused, MMap* __ __maybe_unu
     *addr = val;
 }
 
-static inline void CpuDevMapperReload8(void* ctx, MMap* mmap __maybe_unused, uint8_t* addr, uint8_t val)
+static void CpuDevMapperReload8(void* ctx, MMap* mmap __maybe_unused, uint8_t* addr, uint8_t val)
 {
     CNesConnector* con = ctx;
 
-    LogPrintDbg("Update bank: %d\n",  val);
     MapperPrgBankSwitch(con->mapper, addr, val);
 }
 
