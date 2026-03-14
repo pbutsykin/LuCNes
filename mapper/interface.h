@@ -13,7 +13,7 @@ void MapperFree(MapperObj* mapper);
 
 void MapperPrgBankInitTable(MapperObj* mapper, MMap* mmap, const region_t* prg);
 
-void MapperPrgBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t val);
+void MapperPrgBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t val);
 
 void MapperInitMirroring(MapperObj* mapper, PPUMMap* mmap, bool vertical);
 

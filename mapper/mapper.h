@@ -60,7 +60,7 @@ typedef struct _MapperId {
 
     MapperObj* (*init)(void);
     void (*initMirroring)(MapperObj* mapper, PPUMMap* mmap, bool vertical);
-    void (*bankSwitch)(MapperObj* mapper, const uint8_t* addr, uint8_t val);
+    void (*bankSwitch)(MapperObj* mapper, uint16_t cpuAddr, uint8_t val);
 } MapperId;
 
 typedef struct _MapperObj {

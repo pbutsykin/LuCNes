@@ -36,7 +36,7 @@ void AxRomNameTableInit(MapperObj* _ __maybe_unused, PPUMMap* mmap, bool __ __ma
     SingleScreenBlkSwitch(mmap->name, mmap->nameMirrTable, MAPPER_BLK0 >> MAPPER_BLK_BITS);
 }
 
-void AxRoomMapperBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t bank)
+void AxRoomMapperBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t bank)
 {
     const MapperId* id = mapper->id;
     CNesConnector* con = mapper->con;
@@ -44,6 +44,7 @@ void AxRoomMapperBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t bank
     PPUMMap* ppuMMap = PpuMMap(con->ppu);
 
     if (con->rdesc->submapper == AXROM_SUBMAPPER_BUS_CONFLICT) {
+        uint8_t* addr = MMapPrgResolve(CpuMMap(con->cpu), cpuAddr);
         /* Bus conflict: the written value is ANDed with the ROM value at the write address. */
         bank = *addr & bank;
         LogPrintDbg("Bus conflict: rom=%02X, result=%02X\n", *addr, bank);

@@ -5,6 +5,7 @@
 #define MAPPER
 
 #include <utils/utils.h>
+#include <cpu/interface.h>
 #include <ppu/interface.h>
 #include <rom/rom.h>
 #include <connector.h>
@@ -24,7 +25,7 @@ enum CnRomSubmapper {
  * https://www.nesdev.org/wiki/CNROM
  * CNROM: 32KB fixed PRG, writes to $8000-$FFFF select 8KB CHR bank.
  */
-void CnRomBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t bank)
+void CnRomBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t bank)
 {
     const MapperId* id = mapper->id;
     const CNesConnector* con = mapper->con;
@@ -32,6 +33,8 @@ void CnRomBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t bank)
     uint8_t* bankBase;
 
     if (con->rdesc->submapper == CNROM_SUBMAPPER_BUS_CONFLICT) {
+        uint8_t* addr = MMapPrgResolve(CpuMMap(con->cpu), cpuAddr);
+
         bank = *addr & bank;
         LogPrintDbg("Bus conflict: rom=%02X, result=%02X\n", *addr, bank);
     }

@@ -75,7 +75,10 @@ enum {
 };
 
 typedef struct _CpuMappedDevMemory {
-    void* addr;
+    union {
+        void* addr;
+        uint16_t cpuAddr;
+    };
     void* ctx;
     void* (*cpuRead)(void* ctx, MMap* mmap, uint8_t* addr);
     void (*cpuWrite8)(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val);
@@ -97,17 +100,18 @@ static inline void CpuDevMemWrite16(void* _ __maybe_unused, MMap* __ __maybe_unu
     *addr = val;
 }
 
-static void CpuDevMapperReload8(void* ctx, MMap* mmap __maybe_unused, uint8_t* addr, uint8_t val)
+static void CpuDevMapperReload8(void* ctx, MMap* mmap, uint8_t* __ __maybe_unused, uint8_t val)
 {
-    CNesConnector* con = ctx;
+    CpuMappedDevMemory* mdev = ctx;
+    CNesConnector* con = CONTAINER_OF(mmap, LuCNesCPU, mmap)->con;
 
-    MapperPrgBankSwitch(con->mapper, addr, val);
+    MapperPrgBankSwitch(con->mapper, mdev->cpuAddr, val);
 }
 
 static inline void CpuDevMapperReload16(void* ctx, MMap* mmap, uint16_t* addr, uint16_t val)
 {
     LogPrintAssert(0, "Is write16 used to switch banks?");
-    CpuDevMapperReload8(ctx, mmap, (uint8_t*)addr, (uint8_t)val);
+    CpuDevMapperReload8(ctx, mmap, (uint8_t*)addr, val);
 }
 
 static inline void CpuSyncDevices(LuCNesCPU* cpu, uint8_t cycles)
@@ -121,21 +125,17 @@ static inline void CpuSyncDevices(LuCNesCPU* cpu, uint8_t cycles)
     cpu->ioInsnCycles = 0;
 }
 
-static CpuMappedDevMemory CpuSlowResolveAddr(LuCNesCPU* cpu, MMap* mmap, uint16_t addr, bool write)
+static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_t addr, bool write)
 {
-    CpuMappedDevMemory mdev = {
-        .cpuRead = CpuDevMemReadN,
-        .cpuWrite8 = CpuDevMemWrite8,
-        .cpuWrite16 = CpuDevMemWrite16,
-    };
+    MMap* mmap = &cpu->mmap;
 
     switch(addr) {
         case CPU_RAM:
-            mdev.addr = mmap->ram + addr;
+            mdev->addr = mmap->ram + addr;
             break;
         case PPU_REG:
         case PPU_MIRROR:
-            mdev = (CpuMappedDevMemory) {
+            *mdev = (CpuMappedDevMemory) {
                 .addr = mmap->ppuReg + (addr & MASK_PPU),
                 .ctx = cpu->con->ppu,
                 .cpuRead = PpuRegRead,
@@ -144,7 +144,7 @@ static CpuMappedDevMemory CpuSlowResolveAddr(LuCNesCPU* cpu, MMap* mmap, uint16_
             CpuSyncDevices(cpu, cpu->ioInsnCycles);
             break;
         case SOUND_REG:
-            mdev = (CpuMappedDevMemory) {
+            *mdev = (CpuMappedDevMemory) {
                 .addr = mmap->apuReg + (addr & MASK_SREG),
                 .ctx = cpu->con->apu,
                 .cpuWrite8 = ApuRegWrite,
@@ -152,7 +152,7 @@ static CpuMappedDevMemory CpuSlowResolveAddr(LuCNesCPU* cpu, MMap* mmap, uint16_
             CpuSyncDevices(cpu, cpu->ioInsnCycles);
             break;
         case CPU_DMA:
-            mdev = (CpuMappedDevMemory) {
+            *mdev = (CpuMappedDevMemory) {
                 .addr = mmap->dma,
                 .ctx = cpu->con->ppu,
                 .cpuRead = PpuDMARead,
@@ -161,7 +161,7 @@ static CpuMappedDevMemory CpuSlowResolveAddr(LuCNesCPU* cpu, MMap* mmap, uint16_
             CpuSyncDevices(cpu, cpu->ioInsnCycles);
             break;
         case SOUND_CHAN:
-            mdev = (CpuMappedDevMemory) {
+            *mdev = (CpuMappedDevMemory) {
                 .addr = mmap->soundChan,
                 .ctx = cpu->con->apu,
                 .cpuRead = ApuRegRead,
@@ -170,7 +170,7 @@ static CpuMappedDevMemory CpuSlowResolveAddr(LuCNesCPU* cpu, MMap* mmap, uint16_
             CpuSyncDevices(cpu, cpu->ioInsnCycles);
             break;
         case JOY_PAD1:
-            mdev = (CpuMappedDevMemory) {
+            *mdev = (CpuMappedDevMemory) {
                 .addr = mmap->joy1,
                 .ctx = cpu->con->ctl,
                 .cpuRead = ControllerRegRead,
@@ -180,14 +180,14 @@ static CpuMappedDevMemory CpuSlowResolveAddr(LuCNesCPU* cpu, MMap* mmap, uint16_
         case JOY_PAD2:
             /* $4017: Read = Joypad 2, Write = APU Frame Counter */
             if (write) {
-                mdev = (CpuMappedDevMemory) {
+                *mdev = (CpuMappedDevMemory) {
                     .addr = mmap->mmio4018, /* abuse $4018 */
                     .ctx = cpu->con->apu,
                     .cpuWrite8 = ApuRegWrite,
                 };
                 CpuSyncDevices(cpu, cpu->ioInsnCycles);
             } else {
-                mdev = (CpuMappedDevMemory) {
+                *mdev = (CpuMappedDevMemory) {
                     .addr = mmap->joy2,
                     .ctx = cpu->con->ctl,
                     .cpuRead = ControllerRegRead,
@@ -198,65 +198,73 @@ static CpuMappedDevMemory CpuSlowResolveAddr(LuCNesCPU* cpu, MMap* mmap, uint16_
             if (unlikely(!mmap->sRAM))
                 mmap->sRAM = MemAlloc(KB(8));
 
-            mdev.addr = mmap->sRAM + (addr & MASK_SRAM); /* TODO: mirror for sRAM size < 8kb */
+            mdev->addr = mmap->sRAM + (addr & MASK_SRAM); /* TODO: mirror for sRAM size < 8kb */
             break;
         case PRG_ROM:
             if (unlikely(write)) {
-                mdev.ctx = cpu->con;
-                mdev.cpuWrite8 = CpuDevMapperReload8;
-                mdev.cpuWrite16 = CpuDevMapperReload16;
+                *mdev = (CpuMappedDevMemory) {
+                    .cpuAddr = addr,
+                    .ctx = mdev,
+                    .cpuWrite8 = CpuDevMapperReload8,
+                    .cpuWrite16 = CpuDevMapperReload16,
+                };
+                break;
             }
-            mdev.addr = MMapPrgResolve(mmap, addr);
+            mdev->addr = MMapPrgResolve(mmap, addr);
             break;
         default: 
-            mdev = (CpuMappedDevMemory){0};
+            *mdev = (CpuMappedDevMemory){0};
             LogPrintAssert(0, "Address 0x%x not resolved\n", addr);
             break;
     }
-    return mdev;
 }
 
 inline uint16_t CpuMemRead16(MMap* mmap, uint16_t addr)
 {
     LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
-    CpuMappedDevMemory mdev;
+    CpuMappedDevMemory mdev = {
+        .cpuRead = CpuDevMemReadN,
+    };
         /* Slow path for non-contiguous 8kb prg bank boundaries.*/
     if (unlikely((addr & PRG_BANK_MASK) == PRG_BANK_MASK && addr > PRG_ADDR)) {
         uint8_t lo = CpuMemRead8(mmap, addr), hi = CpuMemRead8(mmap, addr + 1);
         return (uint16_t)lo | ((uint16_t)hi << 8);
     }
     cpu->ioInsnCycles += 2;
-    mdev = CpuSlowResolveAddr(cpu, mmap, addr, false);
+    CpuSlowResolveAddr(cpu, &mdev, addr, false);
     return *(uint16_t*)mdev.cpuRead(mdev.ctx, mmap, mdev.addr);
 }
 
 inline uint8_t CpuMemRead8(MMap* mmap, uint16_t addr)
 {
     LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
-    CpuMappedDevMemory mdev;
-
+    CpuMappedDevMemory mdev = {
+        .cpuRead = CpuDevMemReadN,
+    };
     cpu->ioInsnCycles++;
-    mdev = CpuSlowResolveAddr(cpu, mmap, addr, false);
+    CpuSlowResolveAddr(cpu, &mdev, addr, false);
     return *(uint8_t*)mdev.cpuRead(mdev.ctx, mmap, mdev.addr);
 }
 
 inline void CpuMemWrite16(MMap* mmap, uint16_t addr, uint16_t val)
 {
     LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
-    CpuMappedDevMemory mdev;
-
+    CpuMappedDevMemory mdev = {
+        .cpuWrite16 = CpuDevMemWrite16,
+    };
     cpu->ioInsnCycles += 2;
-    mdev = CpuSlowResolveAddr(cpu, mmap, addr, true);
+    CpuSlowResolveAddr(cpu, &mdev, addr, true);
     mdev.cpuWrite16(mdev.ctx, mmap, mdev.addr, val);
 }
 
 inline void CpuMemWrite8(MMap* mmap, uint16_t addr, uint8_t val)
 {
     LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
-    CpuMappedDevMemory mdev;
-
+    CpuMappedDevMemory mdev = {
+        .cpuWrite8 = CpuDevMemWrite8,
+    };
     cpu->ioInsnCycles++;
-    mdev = CpuSlowResolveAddr(cpu, mmap, addr, true);
+    CpuSlowResolveAddr(cpu, &mdev, addr, true);
     mdev.cpuWrite8(mdev.ctx, mmap, mdev.addr, val);
 }
 

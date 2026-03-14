@@ -38,7 +38,7 @@ static void NameTableMirrorInit(MapperObj* _ __maybe_unused, PPUMMap* mmap, bool
     }
 }
 
-static void MapperBankSwitchDefault(MapperObj* mapper, const uint8_t* addr __maybe_unused, uint8_t bank)
+static void MapperBankSwitchDefault(MapperObj* mapper, uint16_t cpuAddr __maybe_unused, uint8_t bank)
 {
     const MapperId* id = mapper->id;
     const CNesConnector* con = mapper->con;
@@ -142,11 +142,11 @@ void MapperPrgBankInitTable(MapperObj* mapper, MMap* mmap, const region_t* prg)
     MapperPrgSet32K(mmap, prg->data, mapper->bankMask);
 }
 
-void MapperPrgBankSwitch(MapperObj* mapper, const uint8_t* addr, uint8_t val)
+void MapperPrgBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t val)
 {
     LogPrintDbg("Update bank: %d <- %d\n",  mapper->bank, val);
 
-    mapper->id->bankSwitch(mapper, addr, val);
+    mapper->id->bankSwitch(mapper, cpuAddr, val);
 }
 
 void MapperInitMirroring(MapperObj* mapper, PPUMMap* mmap, bool vertical)
