@@ -39,6 +39,20 @@ enum {
     MAPPER_BLK_MAX = 2 << MAPPER_BLK_BITS,
 };
 
+enum PrgBankWin {
+    PRG_BANK8K_WIN0 = 0,
+    PRG_BANK8K_WIN1 = 1,
+    PRG_BANK8K_WIN2 = 2,
+    PRG_BANK8K_WIN3 = 3,
+
+    PRG_BANK16K_WIN0 = PRG_BANK8K_WIN0,
+    PRG_BANK16K_WIN1 = PRG_BANK8K_WIN2,
+
+    PRG_BANK32K_WIN  = PRG_BANK16K_WIN0,
+};
+
+#define PRG_BANK_NO_MASK ((uint32_t)-1)
+
 typedef struct _MapperObj {
     uint8_t  id;
     uint8_t bShift;
@@ -46,9 +60,11 @@ typedef struct _MapperObj {
     char*   label;
 
     void (*initMirroring)(PPUMMap* mmap, bool vertical);
-    uint8_t* (*bankSwitch)(const MapperObj* mapper, CNesConnector* con, const region_t* reg, const uint8_t* addr, uint8_t val);
+    void (*bankSwitch)(const MapperObj* mapper, CNesConnector* con, const region_t* prg, const uint8_t* addr, uint8_t val);
 } MapperObj;
 
 MapperObj* MapperLookupById(uint8_t id);
+
+void MapperPrgSet32K(MMap* mmap, uint8_t* data, uint32_t mask);
 
 #endif /* __CNES_MAPPER_ */

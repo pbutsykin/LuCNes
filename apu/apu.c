@@ -232,7 +232,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             else if (!apu->state.dmc.bytesRemaining) {
                 /* Restart DMC sample */
                 apu->state.dmc.currAddr = (DMC_BASE_ADDR | ((uint16_t)reg->dmc.sampleAddr << 6)) &
-                                          mmap->prg.offsMask;
+                                          DMC_ADDR_MASK;
                 apu->state.dmc.bytesRemaining = ((uint16_t)reg->dmc.sampleLen << 4) + 1;
             }
             /* Clear DMC IRQ flag */
@@ -364,23 +364,18 @@ static void DmcOutputTick(APUStateDMC* dmc)
 
 static void DmcMemoryReaderTick(LuCNesAPU* apu, APUStateDMC* dmc)
 {
-    MMap* mmap;
-
     if (likely(!dmc->bufferEmpty || !dmc->bytesRemaining))
         return;
 
-    mmap = CpuMMap(apu->con->cpu);
     /* TODO: DMC DMA steals 1-4 CPU cycles per sample byte read.
      * This affects CPU/PPU timing but is omitted for simplicity.
      * See: https://www.nesdev.org/wiki/APU_DMC#Memory_reader
      */
-    dmc->sampleBuf = *(mmap->prg.addr + dmc->currAddr);
+    dmc->sampleBuf = *MMapPrgResolve(CpuMMap(apu->con->cpu), dmc->currAddr);
     dmc->bufferEmpty = false;
 
-    LogPrintAssert(mmap->prg.offsMask <= DMC_ADDR_MASK, "Invalid DMC addr mask: %x\n", mmap->prg.offsMask);
-
     /* Address wraps at $FFFF to $8000. */
-    dmc->currAddr = (dmc->currAddr + 1) & mmap->prg.offsMask;
+    dmc->currAddr = (dmc->currAddr + 1) & DMC_ADDR_MASK;
 
     /* When bytes remaining becomes 0: */
     if (unlikely(!--dmc->bytesRemaining)) {
@@ -388,7 +383,7 @@ static void DmcMemoryReaderTick(LuCNesAPU* apu, APUStateDMC* dmc)
 
         if (reg->loop) {
             /* If loop flag is set, restart sample */
-            dmc->currAddr = (DMC_BASE_ADDR | ((uint16_t)reg->sampleAddr << 6)) & mmap->prg.offsMask;
+            dmc->currAddr = (DMC_BASE_ADDR | ((uint16_t)reg->sampleAddr << 6)) & DMC_ADDR_MASK;
             dmc->bytesRemaining = ((uint16_t)reg->sampleLen << 4) + 1;
         } else if (reg->irqEnabled)
             apu->reg->status.dmcIrq = 1; /* If IRQ enabled flag is set, set DMC IRQ flag */

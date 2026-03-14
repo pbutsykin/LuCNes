@@ -5,11 +5,12 @@
 #define MAPPER
 
 #include <utils/utils.h>
+#include <cpu/interface.h>
 #include <ppu/mmap.h>
 
 #include "mapper.h"
-#include "axrom.h"
 #include "cnrom.h"
+#include "axrom.h"
 
 #define MAPPER_INIT(_id, _size, _offs, _nm_init, _map_reload) \
     {_id, _size, _offs, #_id, _nm_init, _map_reload}
@@ -36,11 +37,15 @@ static void NameTableMirrorInit(PPUMMap* mmap, bool vertical)
     }
 }
 
-static uint8_t* MapperBankSwitchDefault(const MapperObj* mapper, CNesConnector* con __maybe_unused,
-                                        const region_t* reg, const uint8_t* addr __maybe_unused, uint8_t bank)
+static void MapperBankSwitchDefault(const MapperObj* mapper, CNesConnector* con,
+                                    const region_t* prg, const uint8_t* addr __maybe_unused, uint8_t bank)
 {
-    LogPrintAssert((uint32_t)(bank << mapper->bShift) <= reg->size, "pool overflow! reg->size: %d, bank: %d\n", reg->size, bank);
-    return reg->data + (bank << mapper->bShift);
+    uint8_t* base = prg->data + (bank << mapper->bShift);
+    uint32_t bankSize = 1U << mapper->bShift;
+
+    LogPrintAssert((uint32_t)(bank << mapper->bShift) <= prg->size, "pool overflow! prg->size: %d, bank: %d\n", prg->size, bank);
+
+    MapperPrgSet32K(CpuMMap(con->cpu), base, MIN(prg->size - 1, bankSize - 1));
 }
 
 static MapperObj MapperList[] = {
@@ -108,21 +113,30 @@ MapperObj* MapperLookupById(uint8_t id)
     return NULL;
 }
 
-uint16_t MapperPrgOffsetMask(const MapperObj* mapper, uint32_t prgSize)
+void MapperPrgSet32K(MMap* mmap, uint8_t* data, uint32_t mask)
+{
+    uint8_t** prgTab = mmap->prgBankTable;
+
+    prgTab[PRG_BANK32K_WIN] = data;
+    prgTab[PRG_BANK32K_WIN + 1] = data + (KB(8)  & mask);
+    prgTab[PRG_BANK32K_WIN + 2] = data + (KB(16) & mask);
+    prgTab[PRG_BANK32K_WIN + 3] = data + (KB(24) & mask);
+}
+
+void MapperPrgBankInitTable(const MapperObj* mapper, MMap* mmap, const region_t* prg)
 {
     uint32_t bankSize = 1U << mapper->bShift;
 
     LogPrintAssert(bankSize == KB(16) || bankSize == KB(32), "Invalid bank size: %u\n", bankSize);
 
-    /* If the PRG ROM is smaller than the window, we should mirror the upper address range. */
-    return bankSize > prgSize ? prgSize - 1 : bankSize - 1;
+    MapperPrgSet32K(mmap, prg->data, MIN(prg->size - 1, bankSize - 1));
 }
 
-uint8_t* MapperPrgBankSwitch(CNesConnector* con, const region_t* prg, const uint8_t* addr, uint8_t val)
+void MapperPrgBankSwitch(CNesConnector* con, const region_t* prg, const uint8_t* addr, uint8_t val)
 {
     const MapperObj* mapper = con->mapper;
 
-    return mapper->bankSwitch(mapper, con, prg, addr, val);
+    mapper->bankSwitch(mapper, con, prg, addr, val);
 }
 
 void MapperInitMirroring(const MapperObj* mapper, PPUMMap* mmap, bool vertical)

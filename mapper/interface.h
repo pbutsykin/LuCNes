@@ -9,10 +9,9 @@ typedef struct _PPUMMap PPUMMap;
 
 MapperObj* MapperLookupById(uint8_t id);
 
-uint16_t MapperPrgOffsetMask(const MapperObj* mapper, uint32_t prgSize);
+void MapperPrgBankInitTable(const MapperObj* mapper, MMap* mmap, const region_t* prg);
 
-uint8_t* MapperPrgBankSwitch(CNesConnector* con, const region_t* prg,
-                             const uint8_t* addr, uint8_t val);
+void MapperPrgBankSwitch(CNesConnector* con, const region_t* prg, const uint8_t* addr, uint8_t val);
 
 void MapperInitMirroring(const MapperObj* mapper, PPUMMap* mmap, bool vertical);
 

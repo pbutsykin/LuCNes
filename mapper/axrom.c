@@ -5,6 +5,7 @@
 #define MAPPER
 
 #include <utils/utils.h>
+#include <cpu/interface.h>
 #include <ppu/interface.h>
 #include <rom/rom.h>
 #include <connector.h>
@@ -35,8 +36,8 @@ void AxRomNameTableInit(PPUMMap* mmap, bool _ __maybe_unused)
     SingleScreenBlkSwitch(mmap->name, mmap->nameMirrTable, MAPPER_BLK0 >> MAPPER_BLK_BITS);
 }
 
-uint8_t* AxRoomMapperBankSwitch(const MapperObj* mapper, CNesConnector* con, const region_t* reg,
-                                const uint8_t* addr, uint8_t bank)
+void AxRoomMapperBankSwitch(const MapperObj* mapper, CNesConnector* con, const region_t* prg,
+                            const uint8_t* addr, uint8_t bank)
 {
     PPUMMap* ppuMMap = PpuMMap(con->ppu);
 
@@ -50,7 +51,8 @@ uint8_t* AxRoomMapperBankSwitch(const MapperObj* mapper, CNesConnector* con, con
     SingleScreenBlkSwitch(ppuMMap->name, ppuMMap->nameMirrTable, con->pins.CIRAM_A10);
     bank &= PRG_ROM_BANK_MASK;
 
-    LogPrintAssert((uint32_t)(bank << mapper->bShift) <= reg->size, "PRG overflow");
+    LogPrintAssert((uint32_t)(bank << mapper->bShift) <= prg->size, "PRG overflow");
     LogPrintDbg("NTable switch to %u, prg: %x\n", con->pins.CIRAM_A10, (bank << mapper->bShift));
-    return reg->data + (bank << mapper->bShift);
+
+    MapperPrgSet32K(CpuMMap(con->cpu), prg->data + (bank << mapper->bShift), PRG_BANK_NO_MASK);
 }

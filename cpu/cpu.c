@@ -28,7 +28,7 @@ typedef struct _CpuSpaceEmulate {
     uint8_t SRAM[];    /* 0x6000 ... 0x7FFF (Optional) */
 } CpuSpaceEmulate;
 
-static void CpuMMapInit(RomDesc* const rdesc, MapperObj* const mapper, MMap* mmap)
+static void CpuMMapInit(const RomDesc* rdesc, const MapperObj* mapper, MMap* mmap)
 {
 #define GET_VSPACE_ADDR(_P) ((CpuSpaceEmulate*)_P)
 
@@ -42,10 +42,7 @@ static void CpuMMapInit(RomDesc* const rdesc, MapperObj* const mapper, MMap* mma
     mmap->joy2 = &GET_VSPACE_ADDR(virtMem)->Joy2;
     mmap->mmio4018 = GET_VSPACE_ADDR(virtMem)->DisabledAPUIO;
     mmap->sRAM = rdesc->sram ? (uint8_t*)&GET_VSPACE_ADDR(virtMem)->SRAM : NULL;
-
-    mmap->prg.addr = rdesc->prg.data;
-    mmap->prg.offsMask = MapperPrgOffsetMask(mapper, rdesc->prg.size);
-    mmap->prg.bank = 0;
+    MapperPrgBankInitTable(mapper, mmap, &rdesc->prg);
 
 #undef GET_VSPACE_ADDR
 }
@@ -68,6 +65,7 @@ static void CpuMMapInit(RomDesc* const rdesc, MapperObj* const mapper, MMap* mma
 #define APU_IO     0x4018 ... 0x401F /* APU and I/O functionality that is normally disabled. */
 #define PRG_RAM    0x6000 ... 0x7FFF
 #define PRG_ROM    0x8000 ... 0xFFFF
+#define PRG_ADDR   0x8000
 
 enum {
     MASK_SREG = 0xFF,
@@ -99,16 +97,12 @@ static inline void CpuDevMemWrite16(void* _ __maybe_unused, MMap* __ __maybe_unu
     *addr = val;
 }
 
-static inline void CpuDevMapperReload8(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
+static inline void CpuDevMapperReload8(void* ctx, MMap* mmap __maybe_unused, uint8_t* addr, uint8_t val)
 {
-    if (unlikely(mmap->prg.bank == val))
-        return;
-
-    LogPrintDbg("Update bank: %d <- %d\n",  mmap->prg.bank, val);
-
     CNesConnector* con = ctx;
-    mmap->prg.addr = MapperPrgBankSwitch(con, &con->rdesc->prg, addr, val);
-    mmap->prg.bank = val;
+
+    LogPrintDbg("Update bank: %d\n",  val);
+    MapperPrgBankSwitch(con, &con->rdesc->prg, addr, val);
 }
 
 static inline void CpuDevMapperReload16(void* ctx, MMap* mmap, uint16_t* addr, uint16_t val)
@@ -213,7 +207,7 @@ static CpuMappedDevMemory CpuSlowResolveAddr(LuCNesCPU* cpu, MMap* mmap, uint16_
                 mdev.cpuWrite8 = CpuDevMapperReload8;
                 mdev.cpuWrite16 = CpuDevMapperReload16;
             }
-            mdev.addr = mmap->prg.addr + (addr & mmap->prg.offsMask);
+            mdev.addr = MMapPrgResolve(mmap, addr);
             break;
         default: 
             mdev = (CpuMappedDevMemory){0};
@@ -227,7 +221,11 @@ inline uint16_t CpuMemRead16(MMap* mmap, uint16_t addr)
 {
     LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
     CpuMappedDevMemory mdev;
-
+        /* Slow path for non-contiguous 8kb prg bank boundaries.*/
+    if (unlikely((addr & PRG_BANK_MASK) == PRG_BANK_MASK && addr > PRG_ADDR)) {
+        uint8_t lo = CpuMemRead8(mmap, addr), hi = CpuMemRead8(mmap, addr + 1);
+        return (uint16_t)lo | ((uint16_t)hi << 8);
+    }
     cpu->ioInsnCycles += 2;
     mdev = CpuSlowResolveAddr(cpu, mmap, addr, false);
     return *(uint16_t*)mdev.cpuRead(mdev.ctx, mmap, mdev.addr);
@@ -293,7 +291,6 @@ void CpuDebugDumpState(LuCNesCPU* cpu)
 {
     LogPrintDbg("cpu dump:\n");
     CpuDebugDumpReg(&cpu->reg);
-    LogPrintDbg("prg->bank: %u\n", cpu->mmap.prg.bank);
 }
 
 static void CpuInitTestState(__maybe_unused LuCNesCPU* cpu, __maybe_unused CNesCPUTestState* test)

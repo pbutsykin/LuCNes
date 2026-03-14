@@ -24,8 +24,8 @@ enum CnRomSubmapper {
  * https://www.nesdev.org/wiki/CNROM
  * CNROM: 32KB fixed PRG, writes to $8000-$FFFF select 8KB CHR bank.
  */
-uint8_t* CnRomBankSwitch(const MapperObj* mapper, CNesConnector* con,
-                          const region_t* reg, const uint8_t* addr, uint8_t bank)
+void CnRomBankSwitch(const MapperObj* mapper, CNesConnector* con,
+                     const region_t* prg __maybe_unused, const uint8_t* addr, uint8_t bank)
 {
     PPUMMap* ppuMMap = PpuMMap(con->ppu);
     uint8_t* bankBase;
@@ -41,5 +41,4 @@ uint8_t* CnRomBankSwitch(const MapperObj* mapper, CNesConnector* con,
     bankBase = con->rdesc->chr.data + (bank << mapper->pShift);
     ppuMMap->ptMirrTable[0] = bankBase;
     ppuMMap->ptMirrTable[1] = bankBase + PPU_PATTERN_SIZE;
-    return reg->data;
 }
