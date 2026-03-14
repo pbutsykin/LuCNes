@@ -59,6 +59,7 @@ typedef struct _MapperId {
     char*   label;
 
     MapperObj* (*init)(void);
+    void (*initPrgBankTable)(MapperObj* mapper, MMap* mmap, const region_t* prg);
     void (*initMirroring)(MapperObj* mapper, PPUMMap* mmap, bool vertical);
     void (*bankSwitch)(MapperObj* mapper, uint16_t cpuAddr, uint8_t val);
 } MapperId;

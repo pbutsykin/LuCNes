@@ -13,11 +13,11 @@
 #include "cnrom.h"
 #include "axrom.h"
 
-#define MAPPER_INIT(_id, _size, _offs, _init, _nm_init, _map_reload) \
-    {_id, _size, _offs, #_id, _init, _nm_init, _map_reload}
+#define MAPPER_INIT(_id, _size, _offs, _init, _prg_init, _nm_init, _map_reload) \
+    {_id, _size, _offs, #_id, _init, _prg_init, _nm_init, _map_reload}
 
 #define MAPPER_UNDEFINED(_id) \
-    {_id, 0xff, 0xff, #_id, NULL, NULL, NULL}
+    {_id, 0xff, 0xff, #_id, NULL, NULL, NULL, NULL}
 
 #define MAP_PARAMS_UNDEFINE 0xff
 
@@ -53,16 +53,30 @@ static void MapperBankSwitchDefault(MapperObj* mapper, uint16_t cpuAddr __maybe_
     MapperPrgSet32K(CpuMMap(con->cpu), prg->data + (bank << id->bShift), mapper->bankMask);
 }
 
+static void MapperPrgBankInitTableDefault(MapperObj* mapper, MMap* mmap, const region_t* prg)
+{
+    uint32_t bankSize = 1U << mapper->id->bShift;
+
+    mapper->bankMask = MIN(prg->size - 1, bankSize - 1);
+
+    LogPrintAssert(bankSize == KB(16) || bankSize == KB(32), "Invalid bank size: %u\n", bankSize);
+
+    MapperPrgSet32K(mmap, prg->data, mapper->bankMask);
+}
+
 static const MapperId MapperList[] = {
-    {(uint8_t)-1, (uint8_t)-1, (uint8_t)-1, NULL, NULL, NULL, NULL},
-    MAPPER_INIT(MAP_NROM, NROM_PRG_WIN_SIZE, NROM_CHR_WIN_SIZE, NULL, NameTableMirrorInit, MapperBankSwitchDefault),
+    {(uint8_t)-1, (uint8_t)-1, (uint8_t)-1, NULL, NULL, NULL, NULL, NULL},
+    MAPPER_INIT(MAP_NROM, NROM_PRG_WIN_SIZE, NROM_CHR_WIN_SIZE, NULL,
+                MapperPrgBankInitTableDefault, NameTableMirrorInit, MapperBankSwitchDefault),
     MAPPER_UNDEFINED(MAP_MMC1),
     MAPPER_UNDEFINED(MAP_UXROM),
-    MAPPER_INIT(MAP_CNROM, CNROM_PRG_WIN_SIZE, CNROM_CHR_WIN_SIZE, NULL, NameTableMirrorInit, CnRomBankSwitch),
+    MAPPER_INIT(MAP_CNROM, CNROM_PRG_WIN_SIZE, CNROM_CHR_WIN_SIZE, NULL,
+                MapperPrgBankInitTableDefault, NameTableMirrorInit, CnRomBankSwitch),
     MAPPER_UNDEFINED(MAP_MMC3),
     MAPPER_UNDEFINED(MAP_MMC5),
     MAPPER_UNDEFINED(MAP_F4XXX),
-    MAPPER_INIT(MAP_AXROM, AXROM_PRG_WIN_SIZE, AXROM_CHR_WIN_SIZE, NULL, AxRomNameTableInit, AxRoomMapperBankSwitch),
+    MAPPER_INIT(MAP_AXROM, AXROM_PRG_WIN_SIZE, AXROM_CHR_WIN_SIZE, NULL,
+                MapperPrgBankInitTableDefault, AxRomNameTableInit, AxRoomMapperBankSwitch),
     MAPPER_UNDEFINED(MAP_F3XXX),
     MAPPER_UNDEFINED(MAP_MMC2),
     MAPPER_UNDEFINED(MAP_MMC4),
@@ -133,13 +147,7 @@ void MapperPrgSet32K(MMap* mmap, uint8_t* data, uint32_t mask)
 
 void MapperPrgBankInitTable(MapperObj* mapper, MMap* mmap, const region_t* prg)
 {
-    uint32_t bankSize = 1U << mapper->id->bShift;
-
-    mapper->bankMask = MIN(prg->size - 1, bankSize - 1);
-
-    LogPrintAssert(bankSize == KB(16) || bankSize == KB(32), "Invalid bank size: %u\n", bankSize);
-
-    MapperPrgSet32K(mmap, prg->data, mapper->bankMask);
+    mapper->id->initPrgBankTable(mapper, mmap, prg);
 }
 
 void MapperPrgBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t val)
