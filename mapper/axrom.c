@@ -13,7 +13,6 @@
 #include "mapper.h"
 
 #define CIRAM_BLK_SWITCH_MASK 0x10
-#define PRG_ROM_BANK_MASK 0x7
 
 /*
  * https://www.nesdev.org/wiki/NES_2.0_submappers#007:_0,_1,_2_AxROM
@@ -41,10 +40,12 @@ void AxRoomMapperBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t bank)
     const MapperId* id = mapper->id;
     CNesConnector* con = mapper->con;
     const region_t* prg = &con->rdesc->prg;
+    const uint32_t prgMask = prg->size - 1;
     PPUMMap* ppuMMap = PpuMMap(con->ppu);
+    MMap* cpuMMap = CpuMMap(con->cpu);
 
     if (con->rdesc->submapper == AXROM_SUBMAPPER_BUS_CONFLICT) {
-        uint8_t* addr = MMapPrgResolve(CpuMMap(con->cpu), cpuAddr);
+        uint8_t* addr = MMapPrgResolve(cpuMMap, cpuAddr);
         /* Bus conflict: the written value is ANDed with the ROM value at the write address. */
         bank = *addr & bank;
         LogPrintDbg("Bus conflict: rom=%02X, result=%02X\n", *addr, bank);
@@ -56,10 +57,10 @@ void AxRoomMapperBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t bank)
     mapper->bank = bank;
     con->pins.CIRAM_A10 = !!(bank & CIRAM_BLK_SWITCH_MASK);
     SingleScreenBlkSwitch(ppuMMap->name, ppuMMap->nameMirrTable, con->pins.CIRAM_A10);
-    bank &= PRG_ROM_BANK_MASK;
 
-    LogPrintAssert((uint32_t)(bank << id->bShift) <= prg->size, "PRG overflow");
-    LogPrintDbg("NTable switch to %u, prg: %x\n", con->pins.CIRAM_A10, (bank << id->bShift));
+    LogPrintAssert(IsPowerOf2(prg->size), "Invalid prg size for AxROM: must be a power of 2.\n");
+    LogPrintDbg("NTable switch to %u, prg: %x (shift: %x)\n", con->pins.CIRAM_A10,
+                (bank << id->bShift) & prgMask, id->bShift);
 
-    MapperPrgSet32K(CpuMMap(con->cpu), prg->data + (bank << id->bShift), PRG_BANK_NO_MASK);
+    MapperPrgSet32K(cpuMMap, prg->data + ((bank << id->bShift) & prgMask), PRG_BANK_NO_MASK);
 }

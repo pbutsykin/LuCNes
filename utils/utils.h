@@ -74,6 +74,11 @@ static inline uint8_t FindFirstBit64(uint64_t data)
     return __builtin_ffsll((int64_t)data);
 }
 
+static inline __attribute__((const)) bool IsPowerOf2(unsigned long n)
+{
+    return (n != 0 && ((n & (n - 1)) == 0));
+}
+
 /* utils include */
 #include <config.h>
 #include "log.h"
