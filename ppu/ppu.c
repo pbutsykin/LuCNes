@@ -525,7 +525,7 @@ static void PpuMMapInit(RomDesc* const rdesc, MapperObj* const mapper,
        [ a ] [ b ]
     */
     mmap->name = GET_VRAM_SPACE_ADDR(virtMem)->NameTable0;
-    MapperInitMirroring(mapper, mmap, rdesc->mirrorType == MIRRORING_PPU_NAMETAB_VERTICAL);
+    MapperNameTableInit(mapper, mmap, rdesc->mirrorType == MIRRORING_PPU_NAMETAB_VERTICAL);
     mmap->mirror1 = mmap->name;    /* $3000-$3EFF, Mirrors of $2000-$2EFF */
     mmap->palette = GET_VRAM_SPACE_ADDR(virtMem)->PaletteRAM;
     mmap->mirror2 = mmap->palette; /* $3F20-$3FFF, Mirrors of $3F00-$3F1F */

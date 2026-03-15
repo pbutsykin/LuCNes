@@ -8,8 +8,8 @@
 #define MMC1_CHR_WIN_SIZE 12  /* 4kb chr */
 
 MapperObj* Mmc1MapperInit(void);
-void Mmc1PrgBankInitTable(MapperObj* base, MMap* mmap, const region_t* prg);
-void Mmc1InitMirroring(MapperObj* base, PPUMMap* mmap, bool vertical);
+void Mmc1PrgInit(MapperObj* base, MMap* mmap, const region_t* prg);
+void Mmc1NameTableInit(MapperObj* base, PPUMMap* mmap, bool vertical);
 void Mmc1BankSwitch(MapperObj* base, uint16_t cpuAddr, uint8_t val);
 
 #endif /* __CNES_MAPPER_MMC1_ */

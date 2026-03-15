@@ -42,7 +42,7 @@ static void CpuMMapInit(const RomDesc* rdesc, MapperObj* mapper, MMap* mmap)
     mmap->joy2 = &GET_VSPACE_ADDR(virtMem)->Joy2;
     mmap->mmio4018 = GET_VSPACE_ADDR(virtMem)->DisabledAPUIO;
     mmap->sRAM = rdesc->sram ? (uint8_t*)&GET_VSPACE_ADDR(virtMem)->SRAM : NULL;
-    MapperPrgBankInitTable(mapper, mmap, &rdesc->prg);
+    MapperPrgInit(mapper, mmap, &rdesc->prg);
 
 #undef GET_VSPACE_ADDR
 }

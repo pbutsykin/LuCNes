@@ -74,8 +74,8 @@ typedef struct _MapperId {
     char*   label;
 
     MapperObj* (*init)(void);
-    void (*initPrgBankTable)(MapperObj* mapper, MMap* mmap, const region_t* prg);
-    void (*initMirroring)(MapperObj* mapper, PPUMMap* mmap, bool vertical);
+    void (*initPrg)(MapperObj* mapper, MMap* mmap, const region_t* prg);
+    void (*initNameTable)(MapperObj* mapper, PPUMMap* mmap, bool vertical);
     void (*bankSwitch)(MapperObj* mapper, uint16_t cpuAddr, uint8_t val);
 } MapperId;
 
@@ -88,5 +88,7 @@ typedef struct _MapperObj {
 
 void MapperPrgSet32K(MMap* mmap, uint8_t* data, uint32_t mask);
 void MapperPrgSet16K(MMap* mmap, enum PrgBankWin idx, uint8_t* data);
+void MapperNameTableSingleScreenSwitch(PPUMMap* mmap, uint8_t blkN);
+void MapperNameTableMirrorSwitch(PPUMMap* mmap, bool vertical);
 
 #endif /* __CNES_MAPPER_ */

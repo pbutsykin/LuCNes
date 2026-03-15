@@ -23,16 +23,9 @@ enum AxRomSubmapper {
     AXROM_SUBMAPPER_BUS_CONFLICT = 2,
 };
 
-static inline void SingleScreenBlkSwitch(uint8_t CIRAM[MAPPER_BLK_MAX],
-                                         uint8_t* nameTab[PPU_NAMETAB_MAX_PAGES], uint8_t blkN)
-{
-    nameTab[PPU_NAME_SCREEN0] = nameTab[PPU_NAME_SCREEN1] =
-    nameTab[PPU_NAME_SCREEN2] = nameTab[PPU_NAME_SCREEN3] = &CIRAM[blkN << MAPPER_BLK_BITS];
-}
-
 void AxRomNameTableInit(MapperObj* _ __maybe_unused, PPUMMap* mmap, bool __ __maybe_unused)
 {
-    SingleScreenBlkSwitch(mmap->name, mmap->nameMirrTable, MAPPER_BLK0 >> MAPPER_BLK_BITS);
+    MapperNameTableSingleScreenSwitch(mmap, MAPPER_BLK0 >> MAPPER_BLK_BITS);
 }
 
 void AxRoomMapperBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t bank)
@@ -41,7 +34,6 @@ void AxRoomMapperBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t bank)
     CNesConnector* con = mapper->con;
     const region_t* prg = &con->rdesc->prg;
     const uint32_t prgMask = prg->size - 1;
-    PPUMMap* ppuMMap = PpuMMap(con->ppu);
     MMap* cpuMMap = CpuMMap(con->cpu);
 
     if (con->rdesc->submapper == AXROM_SUBMAPPER_BUS_CONFLICT) {
@@ -56,7 +48,7 @@ void AxRoomMapperBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t bank)
 
     mapper->bank = bank;
     con->pins.CIRAM_A10 = !!(bank & CIRAM_BLK_SWITCH_MASK);
-    SingleScreenBlkSwitch(ppuMMap->name, ppuMMap->nameMirrTable, con->pins.CIRAM_A10);
+    MapperNameTableSingleScreenSwitch(PpuMMap(con->ppu), con->pins.CIRAM_A10);
 
     LogPrintAssert(IsPowerOf2(prg->size), "Invalid prg size for AxROM: must be a power of 2.\n");
     LogPrintDbg("NTable switch to %u, prg: %x (shift: %x)\n", con->pins.CIRAM_A10,

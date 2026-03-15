@@ -25,11 +25,9 @@
 #define NROM_PRG_WIN_SIZE 15
 #define NROM_CHR_WIN_SIZE 0
 
-static void NameTableMirrorInit(MapperObj* _ __maybe_unused, PPUMMap* mmap, bool vertical)
+static void NameTableMirrorSwitch(uint8_t CIRAM[MAPPER_BLK_MAX],
+                                  uint8_t* nameTab[PPU_NAMETAB_MAX_PAGES], bool vertical)
 {
-    uint8_t* CIRAM = mmap->name;
-    uint8_t** nameTab = mmap->nameMirrTable;
-
     if (vertical) {
         nameTab[PPU_NAME_SCREEN0] = nameTab[PPU_NAME_SCREEN2] = &CIRAM[MAPPER_BLK0];
         nameTab[PPU_NAME_SCREEN1] = nameTab[PPU_NAME_SCREEN3] = &CIRAM[MAPPER_BLK1];
@@ -37,6 +35,23 @@ static void NameTableMirrorInit(MapperObj* _ __maybe_unused, PPUMMap* mmap, bool
         nameTab[PPU_NAME_SCREEN0] = nameTab[PPU_NAME_SCREEN1] = &CIRAM[MAPPER_BLK0];
         nameTab[PPU_NAME_SCREEN2] = nameTab[PPU_NAME_SCREEN3] = &CIRAM[MAPPER_BLK1];
     }
+}
+
+static void NameTableSingleScreenSwitch(uint8_t CIRAM[MAPPER_BLK_MAX],
+                                        uint8_t* nameTab[PPU_NAMETAB_MAX_PAGES], uint8_t blkN)
+{
+    nameTab[PPU_NAME_SCREEN0] = nameTab[PPU_NAME_SCREEN1] =
+    nameTab[PPU_NAME_SCREEN2] = nameTab[PPU_NAME_SCREEN3] = &CIRAM[blkN << MAPPER_BLK_BITS];
+}
+
+void MapperNameTableSingleScreenSwitch(PPUMMap* mmap, uint8_t blkN)
+{
+    NameTableSingleScreenSwitch(mmap->name, mmap->nameMirrTable, blkN);
+}
+
+void MapperNameTableMirrorSwitch(PPUMMap* mmap, bool vertical)
+{
+    NameTableMirrorSwitch(mmap->name, mmap->nameMirrTable, vertical);
 }
 
 static void MapperBankSwitchDefault(MapperObj* mapper, uint16_t cpuAddr __maybe_unused, uint8_t bank)
@@ -54,25 +69,30 @@ static void MapperBankSwitchDefault(MapperObj* mapper, uint16_t cpuAddr __maybe_
     MapperPrgSet32K(CpuMMap(con->cpu), prg->data + (bank << id->bShift), mapper->bankMask);
 }
 
-static void MapperPrgBankInitTableDefault(MapperObj* mapper, MMap* mmap, const region_t* prg)
+static void MapperPrgInitDefault(MapperObj* mapper, MMap* mmap, const region_t* prg)
 {
     MapperPrgSet32K(mmap, prg->data, mapper->bankMask);
+}
+
+static void MapperNameTableInitDefault(MapperObj* _ __maybe_unused, PPUMMap* mmap, bool vertical)
+{
+    NameTableMirrorSwitch(mmap->name, mmap->nameMirrTable, vertical);
 }
 
 static const MapperId MapperList[] = {
     {(uint8_t)-1, (uint8_t)-1, (uint8_t)-1, NULL, NULL, NULL, NULL, NULL},
     MAPPER_INIT(MAP_NROM, NROM_PRG_WIN_SIZE, NROM_CHR_WIN_SIZE, NULL,
-                MapperPrgBankInitTableDefault, NameTableMirrorInit, MapperBankSwitchDefault),
+                MapperPrgInitDefault, MapperNameTableInitDefault, MapperBankSwitchDefault),
     MAPPER_INIT(MAP_MMC1, MMC1_PRG_WIN_SIZE, MMC1_CHR_WIN_SIZE, Mmc1MapperInit,
-                Mmc1PrgBankInitTable, Mmc1InitMirroring, Mmc1BankSwitch),
+                Mmc1PrgInit, Mmc1NameTableInit, Mmc1BankSwitch),
     MAPPER_UNDEFINED(MAP_UXROM),
     MAPPER_INIT(MAP_CNROM, CNROM_PRG_WIN_SIZE, CNROM_CHR_WIN_SIZE, NULL,
-                MapperPrgBankInitTableDefault, NameTableMirrorInit, CnRomBankSwitch),
+                MapperPrgInitDefault, MapperNameTableInitDefault, CnRomBankSwitch),
     MAPPER_UNDEFINED(MAP_MMC3),
     MAPPER_UNDEFINED(MAP_MMC5),
     MAPPER_UNDEFINED(MAP_F4XXX),
     MAPPER_INIT(MAP_AXROM, AXROM_PRG_WIN_SIZE, AXROM_CHR_WIN_SIZE, NULL,
-                MapperPrgBankInitTableDefault, AxRomNameTableInit, AxRoomMapperBankSwitch),
+                MapperPrgInitDefault, AxRomNameTableInit, AxRoomMapperBankSwitch),
     MAPPER_UNDEFINED(MAP_F3XXX),
     MAPPER_UNDEFINED(MAP_MMC2),
     MAPPER_UNDEFINED(MAP_MMC4),
@@ -150,7 +170,7 @@ void MapperPrgSet32K(MMap* mmap, uint8_t* data, uint32_t mask)
     prgTab[PRG_BANK32K_WIN + 3] = data + (KB(24) & mask);
 }
 
-void MapperPrgBankInitTable(MapperObj* mapper, MMap* mmap, const region_t* prg)
+void MapperPrgInit(MapperObj* mapper, MMap* mmap, const region_t* prg)
 {
     uint32_t bankSize = 1U << mapper->id->bShift;
 
@@ -158,7 +178,7 @@ void MapperPrgBankInitTable(MapperObj* mapper, MMap* mmap, const region_t* prg)
 
     LogPrintAssert(bankSize == KB(16) || bankSize == KB(32), "Invalid bank size: %u\n", bankSize);
 
-    mapper->id->initPrgBankTable(mapper, mmap, prg);
+    mapper->id->initPrg(mapper, mmap, prg);
 }
 
 void MapperPrgBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t val)
@@ -168,9 +188,9 @@ void MapperPrgBankSwitch(MapperObj* mapper, uint16_t cpuAddr, uint8_t val)
     mapper->id->bankSwitch(mapper, cpuAddr, val);
 }
 
-void MapperInitMirroring(MapperObj* mapper, PPUMMap* mmap, bool vertical)
+void MapperNameTableInit(MapperObj* mapper, PPUMMap* mmap, bool vertical)
 {
-    return mapper->id->initMirroring(mapper, mmap, vertical);
+    return mapper->id->initNameTable(mapper, mmap, vertical);
 }
 
 MapperObj* MapperInit(uint8_t id, CNesConnector* con)

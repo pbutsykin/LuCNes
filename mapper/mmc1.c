@@ -104,32 +104,20 @@ static void Mmc1UpdatePrgMap(MMC1MapperObj* mmc1, MMap* mmap, const region_t* pr
     }
 }
 
-/* MMC1_MIRROR_SINGLE_LO/MMC1_MIRROR_SINGLE_HI: we can reuse SingleScreenBlkSwitch
- * MMC1_MIRROR_VERTICAL/MMC1_MIRROR_HORIZONTAL: we can resue NameTableMirrorInit
- * uint8_t CIRAM_A10:1;
- * uint8_t vertical:1;
- */
 static void Mmc1UpdateMirroring(MMC1MapperObj* mmc1, PPUMMap* mmap)
 {
-    uint8_t* CIRAM = mmap->name;
-    uint8_t** nt = mmap->nameMirrTable;
-
     switch (mmc1->control.nameTab) {
         case MMC1_MIRROR_SINGLE_LO:
-            nt[PPU_NAME_SCREEN0] = nt[PPU_NAME_SCREEN1] =
-                nt[PPU_NAME_SCREEN2] = nt[PPU_NAME_SCREEN3] = &CIRAM[MAPPER_BLK0];
+            MapperNameTableSingleScreenSwitch(mmap, MAPPER_BLK0 >> MAPPER_BLK_BITS);
             break;
         case MMC1_MIRROR_SINGLE_HI:
-            nt[PPU_NAME_SCREEN0] = nt[PPU_NAME_SCREEN1] =
-                nt[PPU_NAME_SCREEN2] = nt[PPU_NAME_SCREEN3] = &CIRAM[MAPPER_BLK1];
+            MapperNameTableSingleScreenSwitch(mmap, MAPPER_BLK1 >> MAPPER_BLK_BITS);
             break;
         case MMC1_MIRROR_VERTICAL:
-            nt[PPU_NAME_SCREEN0] = nt[PPU_NAME_SCREEN2] = &CIRAM[MAPPER_BLK0];
-            nt[PPU_NAME_SCREEN1] = nt[PPU_NAME_SCREEN3] = &CIRAM[MAPPER_BLK1];
+            MapperNameTableMirrorSwitch(mmap, true);
             break;
         case MMC1_MIRROR_HORIZONTAL:
-            nt[PPU_NAME_SCREEN0] = nt[PPU_NAME_SCREEN1] = &CIRAM[MAPPER_BLK0];
-            nt[PPU_NAME_SCREEN2] = nt[PPU_NAME_SCREEN3] = &CIRAM[MAPPER_BLK1];
+            MapperNameTableMirrorSwitch(mmap, false);
             break;
     }
 }
@@ -150,15 +138,15 @@ static void Mmc1UpdateChr(MMC1MapperObj* mmc1, const CNesConnector* con)
     }
 }
 
-void Mmc1InitMirroring(MapperObj* base, PPUMMap* ppuMMap, bool vertical)
+void Mmc1NameTableInit(MapperObj* base, PPUMMap* ppuMMap, bool vertical)
 {
     MMC1MapperObj* mapper = CONTAINER_OF(base, MMC1MapperObj, base);
 
     mapper->control.nameTab = vertical ? MMC1_MIRROR_VERTICAL : MMC1_MIRROR_HORIZONTAL;
-    Mmc1UpdateMirroring(mapper, ppuMMap);
+    MapperNameTableMirrorSwitch(ppuMMap, vertical);
 }
 
-void Mmc1PrgBankInitTable(MapperObj* base, MMap* mmap, const region_t* prg)
+void Mmc1PrgInit(MapperObj* base, MMap* mmap, const region_t* prg)
 {
     MMC1MapperObj* mapper = CONTAINER_OF(base, MMC1MapperObj, base);
 
