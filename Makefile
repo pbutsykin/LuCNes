@@ -139,6 +139,7 @@ $(eval $(call mktest, apu/8-dmc_rates, --max_cycles 0xd339b))
 $(eval $(call mktest, mapper/mmc1_sbrom, --max_cycles 0xe25d))
 $(eval $(call mktest, mapper/mmc1_sgrom, --max_cycles 0xe43f))
 $(eval $(call mktest, mapper/cnrom_0, --max_cycles 0xe259))
+$(eval $(call mktest, mapper/axrom_0, --max_cycles 0x1f192))
 
 $(eval $(call mktest, submapper/3_test_1, --max_cycles 0x13843b))
 $(eval $(call mktest, submapper/3_test_2, --max_cycles 0x13843b))
