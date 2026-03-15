@@ -135,6 +135,8 @@ $(eval $(call mktest, apu/6-irq_flag_timing, --max_cycles 0xa0540))
 $(eval $(call mktest, apu/7-dmc_basics, --max_cycles 0xb6249))
 $(eval $(call mktest, apu/8-dmc_rates, --max_cycles 0xd339b))
 
+$(eval $(call mktest, mapper/mmc1_sbrom, --max_cycles 0xe25d))
+$(eval $(call mktest, mapper/mmc1_sgrom, --max_cycles 0xe43f))
 $(eval $(call mktest, mapper/cnrom_0, --max_cycles 0xe259))
 
 $(eval $(call mktest, submapper/3_test_1, --max_cycles 0x13843b))
