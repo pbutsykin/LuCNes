@@ -10,6 +10,7 @@
 #include <rom/rom.h>
 
 #include "mapper.h"
+#include "mmc1.h"
 #include "cnrom.h"
 #include "axrom.h"
 
@@ -55,12 +56,6 @@ static void MapperBankSwitchDefault(MapperObj* mapper, uint16_t cpuAddr __maybe_
 
 static void MapperPrgBankInitTableDefault(MapperObj* mapper, MMap* mmap, const region_t* prg)
 {
-    uint32_t bankSize = 1U << mapper->id->bShift;
-
-    mapper->bankMask = MIN(prg->size - 1, bankSize - 1);
-
-    LogPrintAssert(bankSize == KB(16) || bankSize == KB(32), "Invalid bank size: %u\n", bankSize);
-
     MapperPrgSet32K(mmap, prg->data, mapper->bankMask);
 }
 
@@ -68,7 +63,8 @@ static const MapperId MapperList[] = {
     {(uint8_t)-1, (uint8_t)-1, (uint8_t)-1, NULL, NULL, NULL, NULL, NULL},
     MAPPER_INIT(MAP_NROM, NROM_PRG_WIN_SIZE, NROM_CHR_WIN_SIZE, NULL,
                 MapperPrgBankInitTableDefault, NameTableMirrorInit, MapperBankSwitchDefault),
-    MAPPER_UNDEFINED(MAP_MMC1),
+    MAPPER_INIT(MAP_MMC1, MMC1_PRG_WIN_SIZE, MMC1_CHR_WIN_SIZE, Mmc1MapperInit,
+                Mmc1PrgBankInitTable, Mmc1InitMirroring, Mmc1BankSwitch),
     MAPPER_UNDEFINED(MAP_UXROM),
     MAPPER_INIT(MAP_CNROM, CNROM_PRG_WIN_SIZE, CNROM_CHR_WIN_SIZE, NULL,
                 MapperPrgBankInitTableDefault, NameTableMirrorInit, CnRomBankSwitch),
@@ -135,6 +131,15 @@ static const MapperId* MapperLookupById(uint8_t id)
     return NULL;
 }
 
+void MapperPrgSet16K(MMap* mmap, enum PrgBankWin idx, uint8_t* data)
+{
+    LogPrintAssert(idx == PRG_BANK16K_WIN0 || idx == PRG_BANK16K_WIN1,
+                   "Invalid prg 16k bank index: %d\n", idx);
+
+    mmap->prgBankTable[idx] = data;
+    mmap->prgBankTable[idx + 1] = data + KB(8);
+}
+
 void MapperPrgSet32K(MMap* mmap, uint8_t* data, uint32_t mask)
 {
     uint8_t** prgTab = mmap->prgBankTable;
@@ -147,6 +152,12 @@ void MapperPrgSet32K(MMap* mmap, uint8_t* data, uint32_t mask)
 
 void MapperPrgBankInitTable(MapperObj* mapper, MMap* mmap, const region_t* prg)
 {
+    uint32_t bankSize = 1U << mapper->id->bShift;
+
+    mapper->bankMask = MIN(prg->size - 1, bankSize - 1);
+
+    LogPrintAssert(bankSize == KB(16) || bankSize == KB(32), "Invalid bank size: %u\n", bankSize);
+
     mapper->id->initPrgBankTable(mapper, mmap, prg);
 }
 

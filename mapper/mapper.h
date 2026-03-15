@@ -50,7 +50,22 @@ enum PrgBankWin {
     PRG_BANK32K_WIN  = PRG_BANK16K_WIN0,
 };
 
-#define PRG_BANK_NO_MASK ((uint32_t)-1)
+enum PrgBankShift {
+    PRG_BANK_8K_SHIFT  = 13,
+    PRG_BANK_16K_SHIFT = 14,
+    PRG_BANK_32K_SHIFT = 15,
+};
+
+enum PrgBankMask {
+    PRG_BANK_8K_MASK  = ~(1 << PRG_BANK_8K_SHIFT),
+    PRG_BANK_16K_MASK = ~(1 << PRG_BANK_16K_SHIFT),
+    PRG_BANK_32K_MASK = ~(1 << PRG_BANK_32K_SHIFT),
+
+    PRG_BANK_NO_MASK = (uint32_t)-1,
+};
+
+#define CHR_BANK_8K_SHIFT 13
+#define CHR_BANK_4K_SHIFT 12
 
 typedef struct _MapperId {
     uint8_t  id;
@@ -72,5 +87,6 @@ typedef struct _MapperObj {
 } MapperObj;
 
 void MapperPrgSet32K(MMap* mmap, uint8_t* data, uint32_t mask);
+void MapperPrgSet16K(MMap* mmap, enum PrgBankWin idx, uint8_t* data);
 
 #endif /* __CNES_MAPPER_ */
