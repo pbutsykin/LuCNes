@@ -66,6 +66,7 @@ static void CpuMMapInit(const RomDesc* rdesc, MapperObj* mapper, MMap* mmap)
 #define PRG_RAM    0x6000 ... 0x7FFF
 #define PRG_ROM    0x8000 ... 0xFFFF
 #define PRG_ADDR   0x8000
+#define CPU_RAM_END_ADDR 0x7FF
 
 enum {
     MASK_SREG = 0xFF,
@@ -222,15 +223,21 @@ static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_
 inline uint16_t CpuMemRead16(MMap* mmap, uint16_t addr)
 {
     LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
+
+    cpu->ioInsnCycles += 2;
+
+    if (likely(addr >= PRG_ADDR)) {
+        /* Slow path for non-contiguous 8kb prg bank boundaries.*/
+        if (unlikely((addr & PRG_BANK_MASK) == PRG_BANK_MASK)) {
+            uint8_t lo = CpuMemRead8(mmap, addr), hi = CpuMemRead8(mmap, addr + 1);
+            return (uint16_t)lo | ((uint16_t)hi << 8);
+        }
+        return *(uint16_t*)MMapPrgResolve(mmap, addr);
+    }
+
     CpuMappedDevMemory mdev = {
         .cpuRead = CpuDevMemReadN,
     };
-        /* Slow path for non-contiguous 8kb prg bank boundaries.*/
-    if (unlikely((addr & PRG_BANK_MASK) == PRG_BANK_MASK && addr > PRG_ADDR)) {
-        uint8_t lo = CpuMemRead8(mmap, addr), hi = CpuMemRead8(mmap, addr + 1);
-        return (uint16_t)lo | ((uint16_t)hi << 8);
-    }
-    cpu->ioInsnCycles += 2;
     CpuSlowResolveAddr(cpu, &mdev, addr, false);
     return *(uint16_t*)mdev.cpuRead(mdev.ctx, mmap, mdev.addr);
 }
@@ -238,10 +245,15 @@ inline uint16_t CpuMemRead16(MMap* mmap, uint16_t addr)
 inline uint8_t CpuMemRead8(MMap* mmap, uint16_t addr)
 {
     LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
+
+    cpu->ioInsnCycles++;
+
+    if (likely(addr >= PRG_ADDR))
+        return *MMapPrgResolve(mmap, addr);
+
     CpuMappedDevMemory mdev = {
         .cpuRead = CpuDevMemReadN,
     };
-    cpu->ioInsnCycles++;
     CpuSlowResolveAddr(cpu, &mdev, addr, false);
     return *(uint8_t*)mdev.cpuRead(mdev.ctx, mmap, mdev.addr);
 }
@@ -249,10 +261,17 @@ inline uint8_t CpuMemRead8(MMap* mmap, uint16_t addr)
 inline void CpuMemWrite16(MMap* mmap, uint16_t addr, uint16_t val)
 {
     LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
+
+    cpu->ioInsnCycles += 2;
+
+    if (likely(addr <= CPU_RAM_END_ADDR)) {
+        *(uint16_t*)(mmap->ram + addr) = val;
+        return;
+    }
+
     CpuMappedDevMemory mdev = {
         .cpuWrite16 = CpuDevMemWrite16,
     };
-    cpu->ioInsnCycles += 2;
     CpuSlowResolveAddr(cpu, &mdev, addr, true);
     mdev.cpuWrite16(mdev.ctx, mmap, mdev.addr, val);
 }
@@ -260,10 +279,17 @@ inline void CpuMemWrite16(MMap* mmap, uint16_t addr, uint16_t val)
 inline void CpuMemWrite8(MMap* mmap, uint16_t addr, uint8_t val)
 {
     LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
+
+    cpu->ioInsnCycles++;
+
+    if (likely(addr <= CPU_RAM_END_ADDR)) {
+        *(mmap->ram + addr) = val;
+        return;
+    }
+
     CpuMappedDevMemory mdev = {
         .cpuWrite8 = CpuDevMemWrite8,
     };
-    cpu->ioInsnCycles++;
     CpuSlowResolveAddr(cpu, &mdev, addr, true);
     mdev.cpuWrite8(mdev.ctx, mmap, mdev.addr, val);
 }
