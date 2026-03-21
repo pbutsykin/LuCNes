@@ -185,11 +185,10 @@ typedef struct _RenderState {
 } RenderState;
 
 typedef struct _PixelDataSet {
-    uint8_t colorIdx;
+    uint8_t colorIdx:2;
+    uint8_t unused:5;
+    uint8_t fgFlag:1;
     PPUPalette* palette;
-    bool foregroundFlag; /* Unused for background.
-                          * XXX: Fix useless move in GetBackgroundPixel().
-                          */
 } PixelDataSet;
 
 static inline void IRegIncX(VRAMAddrReg* current)
@@ -230,6 +229,8 @@ static PixelDataSet GetBackgroundPixel(LuCNesPPU* ppu, RenderState* rs, const ui
 
     uint8_t pixelColorIdx = GetTilePixel(tile, ppu->iRegs.cur.fineY,
                                                ~(x + ppu->iRegs.fineX) & TILE_COLUMN_MASK);
+
+    LogPrintAssert(pixelColorIdx < PPU_COLORS_PER_PALETTE, "Invalid color index for palette\n");
     return (PixelDataSet) {
         .colorIdx = pixelColorIdx,
         .palette = LookupBgPalette(ppu, pixelColorIdx ? getBgPaletteIdx(nt, ntIdx) : 0),
@@ -286,10 +287,11 @@ static PixelDataSet GetSpritePixel(LuCNesPPU* ppu, RenderState* rs,
         if (!spIdx && !bgTransparent)
             SpriteZeroHitHandler(ppu, x);
 
+        LogPrintAssert(pixelColorIdx < PPU_COLORS_PER_PALETTE, "Invalid color index for palette\n");
         return (PixelDataSet) {
             .colorIdx = pixelColorIdx,
+            .fgFlag = (sprite->priority == SPRITE_PRIORITY_FOREGROUND),
             .palette = LookupSpPalette(ppu, sprite->paletteIdx),
-            .foregroundFlag = (sprite->priority == SPRITE_PRIORITY_FOREGROUND),
         };
     }
 
@@ -330,7 +332,7 @@ static void PpuRenderPixel(LuCNesPPU* const ppu, RenderState* const rs, const ui
         if (spEnabled) {
             PixelDataSet spPixel = GetSpritePixel(ppu, rs, y, x, !bgPixel.colorIdx);
 
-            if (spPixel.colorIdx && (!bgPixel.colorIdx || spPixel.foregroundFlag))
+            if (spPixel.colorIdx && (!bgPixel.colorIdx || spPixel.fgFlag))
                 return DrawPixelColor(ppu, y, x, &spPixel);
         }
         return DrawPixelColor(ppu, y, x, &bgPixel);
