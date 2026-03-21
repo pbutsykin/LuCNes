@@ -43,8 +43,7 @@ void VideoSetPixel(VideoBackend* video, const uint8_t y, const uint8_t x, const 
 void VideoFrameFlush(VideoBackend* video)
 {
     SDL_Event event;
-    SDL_WaitEventTimeout(&event, 0);
-    if (event.type == SDL_QUIT) {
+    if (SDL_WaitEventTimeout(&event, 0) && event.type == SDL_QUIT) {
         LogPrintDbg("Exit due to SDL_QUIT event\n");
         exit(0);
     }
