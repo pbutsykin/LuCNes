@@ -23,13 +23,13 @@ SANITIZERS = -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-
 ifeq ($(BUILD),debug)
 	CFLAGS = -g -Og $(CFLAGS_COMMON) -DLOG_LEVEL=3 $(SANITIZERS)
 else ifeq ($(BUILD),release0)
-	CFLAGS = -O2 $(CFLAGS_COMMON) -DNDEBUG -DLOG_LEVEL=0
+	CFLAGS = -O2 -flto=auto $(CFLAGS_COMMON) -DNDEBUG -DLOG_LEVEL=0
 else
-	CFLAGS = -g -O2 $(CFLAGS_COMMON) -DNDEBUG -DLOG_LEVEL=2
+	CFLAGS = -g -O2 -flto=auto $(CFLAGS_COMMON) -DNDEBUG -DLOG_LEVEL=2
 endif
 
 TEST_DEFS = -DCNES_TEST
-CFLAGS_TEST = -g -O2 $(CFLAGS_COMMON) -DLOG_LEVEL=0 -DOPCODE_TRACE=1 $(SANITIZERS) $(TEST_DEFS)
+CFLAGS_TEST = -g -O2 -flto=auto $(CFLAGS_COMMON) -DLOG_LEVEL=0 -DOPCODE_TRACE=1 $(SANITIZERS) $(TEST_DEFS)
 
 SRC_UTILS = utils/file.c utils/memory.c
 SRC_ROM   = rom/rom.c rom/nes.c
