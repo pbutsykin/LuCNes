@@ -119,21 +119,21 @@ static inline uint8_t PaletteIdxFromAttr(const uint8_t attr, const uint16_t ntId
     return (attr >> attrShift) & METATILE_MASK;
 }
 
-static inline uint8_t getBgPaletteIdx(PPUNameTable* const nt, uint16_t const ntIdx)
+static inline uint8_t getBgPaletteIdx(const PPUNameTable* nt, uint16_t const ntIdx)
 {
     const uint8_t atrIdx = attrIdxFromNameTableIdx(ntIdx);
 
     return PaletteIdxFromAttr(nt->attrs[atrIdx], ntIdx);
 }
 
-static inline PPUPalette* LookupBgPalette(LuCNesPPU* const ppu, const uint8_t idx)
+static inline PPUPalette* LookupBgPalette(const LuCNesPPU* ppu, const uint8_t idx)
 {
     LogPrintAssert(idx < PPU_BACKGROUND_PALETTE_NUM, "Invalid back ground palette index: %u\n", idx);
 
     return &ppu->mmap.paletteTable->bgPallets[idx];
 }
 
-static inline PPUPalette* LookupSpPalette(LuCNesPPU* const ppu, const uint8_t idx)
+static inline PPUPalette* LookupSpPalette(const LuCNesPPU* ppu, const uint8_t idx)
 {
     LogPrintAssert(idx < PPU_SPRITE_PALETTE_NUM, "Invalid sprite palette index: %u\n", idx);
 
@@ -185,10 +185,10 @@ typedef struct _RenderState {
 } RenderState;
 
 typedef struct _PixelDataSet {
-    uint8_t colorIdx:2;
-    uint8_t unused:5;
+    uint8_t colorIdx;
+    uint8_t paletteIdx:2;
     uint8_t fgFlag:1;
-    PPUPalette* palette;
+    uint8_t unused:5;
 } PixelDataSet;
 
 static inline void IRegIncX(VRAMAddrReg* current)
@@ -233,7 +233,7 @@ static PixelDataSet GetBackgroundPixel(LuCNesPPU* ppu, RenderState* rs, const ui
     LogPrintAssert(pixelColorIdx < PPU_COLORS_PER_PALETTE, "Invalid color index for palette\n");
     return (PixelDataSet) {
         .colorIdx = pixelColorIdx,
-        .palette = LookupBgPalette(ppu, pixelColorIdx ? getBgPaletteIdx(nt, ntIdx) : 0),
+        .paletteIdx = pixelColorIdx ? getBgPaletteIdx(nt, ntIdx) : 0,
     };
 }
 
@@ -290,8 +290,8 @@ static PixelDataSet GetSpritePixel(LuCNesPPU* ppu, RenderState* rs,
         LogPrintAssert(pixelColorIdx < PPU_COLORS_PER_PALETTE, "Invalid color index for palette\n");
         return (PixelDataSet) {
             .colorIdx = pixelColorIdx,
+            .paletteIdx = sprite->paletteIdx,
             .fgFlag = (sprite->priority == SPRITE_PRIORITY_FOREGROUND),
-            .palette = LookupSpPalette(ppu, sprite->paletteIdx),
         };
     }
 
@@ -300,23 +300,24 @@ static PixelDataSet GetSpritePixel(LuCNesPPU* ppu, RenderState* rs,
     };
 }
 
-static inline void DrawPixelColor(LuCNesPPU* const ppu, const uint8_t y, const uint8_t x,
-                                  const PixelDataSet* pixel)
+static inline void DrawBgPixelColor(const LuCNesPPU* ppu, const uint8_t y, const uint8_t x,
+                                    const PixelDataSet* pixel)
 {
-    LogPrintAssert(pixel->colorIdx < PPU_COLORS_PER_PALETTE, "Invalid color index for palette\n");
-
-    const uint8_t color = pixel->palette->colors[pixel->colorIdx].value;
-
-    VideoSetPixel(ppu->video, y, x, color);
+    PPUPalette* palette = LookupBgPalette(ppu, pixel->paletteIdx);
+    VideoSetPixel(ppu->video, y, x, palette->colors[pixel->colorIdx].value);
 }
 
-static inline void DrawBackDropColor(LuCNesPPU* const ppu, const uint8_t y, const uint8_t x)
+static inline void DrawSpPixelColor(const LuCNesPPU* ppu, const uint8_t y, const uint8_t x,
+                                    const PixelDataSet* pixel)
 {
-    PixelDataSet backdrop = {
-        .palette = LookupBgPalette(ppu, 0),
-        .colorIdx = 0,
-    };
-    DrawPixelColor(ppu, y, x, &backdrop);
+    PPUPalette* palette = LookupSpPalette(ppu, pixel->paletteIdx);
+    VideoSetPixel(ppu->video, y, x, palette->colors[pixel->colorIdx].value);
+}
+
+static inline void DrawBackDropColor(const LuCNesPPU* ppu, const uint8_t y, const uint8_t x)
+{
+    PPUPalette* palette = LookupBgPalette(ppu, 0);
+    VideoSetPixel(ppu->video, y, x, palette->colors[0].value);
 }
 
 static void PpuRenderPixel(LuCNesPPU* const ppu, RenderState* const rs, const uint8_t y, const uint8_t x)
@@ -333,13 +334,13 @@ static void PpuRenderPixel(LuCNesPPU* const ppu, RenderState* const rs, const ui
             PixelDataSet spPixel = GetSpritePixel(ppu, rs, y, x, !bgPixel.colorIdx);
 
             if (spPixel.colorIdx && (!bgPixel.colorIdx || spPixel.fgFlag))
-                return DrawPixelColor(ppu, y, x, &spPixel);
+                return DrawSpPixelColor(ppu, y, x, &spPixel);
         }
-        return DrawPixelColor(ppu, y, x, &bgPixel);
+        return DrawBgPixelColor(ppu, y, x, &bgPixel);
     } else if (spEnabled) {
         PixelDataSet spPixel = GetSpritePixel(ppu, rs, y, x, true);
         if (spPixel.colorIdx)
-            return DrawPixelColor(ppu, y, x, &spPixel);
+            return DrawSpPixelColor(ppu, y, x, &spPixel);
     }
     DrawBackDropColor(ppu, y, x);
 }
