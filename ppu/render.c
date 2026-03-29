@@ -12,6 +12,7 @@
 #define PPU_TILE_COLUMN_NUM (1 << PPU_TILE_COLUMN_BIT)
 #define PPU_TILE_ROW_NUM    (1 << PPU_TILE_ROW_BIT)
 #define PPU_TILE_ROW16_NUM  (PPU_TILE_ROW_NUM << 1)
+#define PPU_LINE_TILES      (PPU_FRAME_WIDTH >> PPU_TILE_COLUMN_BIT)
 
 #define PPU_COLORS_PER_PALETTE 4
 #define PPU_BACKGROUND_PALETTE_NUM 4
@@ -158,9 +159,9 @@ static inline bool PpuRenderingEnabled(const LuCNesPPU* ppu)
     return !(ppu->reg->mask & PPU_RENDERING_ENABLED);
 }
 
-static void SpriteZeroHitHandler(LuCNesPPU* ppu, const uint8_t pixelX)
+static inline void SpriteZeroHitUpdate(LuCNesPPU* ppu, uint8_t pixelX)
 {
-    if (ppu->reg->status & PPU_SPRITE0_MASK)
+    if (ppu->render.sp0.hit || (ppu->reg->status & PPU_SPRITE0_MASK))
         return;
 
     /* https://wiki.nesdev.com/w/index.php?title=PPU_OAM#Sprite_zero_hits
@@ -170,16 +171,14 @@ static void SpriteZeroHitHandler(LuCNesPPU* ppu, const uint8_t pixelX)
     if (pixelX == 255)
         return;
 
-    /* Sprite 0 hit does not happen: At x=0 to x=7 if the left-side clipping window is enabled. */
-    if ((!(ppu->reg->mask & PPU_BACKGROUND_LEFT_ENABLE_MASK) ||
-         !(ppu->reg->mask & PPU_SPRITE_LEFT_ENABLE_MASK)) &&
-        pixelX < PPU_MASK_LEFTMOST_PIXELS)
-    {
-        return;
-    }
+    LogPrintAssert(pixelX >= PPU_MASK_LEFTMOST_PIXELS ||
+                  ((ppu->reg->mask & PPU_BACKGROUND_LEFT_ENABLE_MASK) &&
+                   (ppu->reg->mask & PPU_SPRITE_LEFT_ENABLE_MASK)),
+                "Sprite 0 hit does not happen: At x=0 to x=7 if the left-side clipping window is enabled.");
 
-    LogPrintDbg("ZeroHit: x: %u\n", pixelX);
-    ppu->reg->status |= PPU_SPRITE0_MASK;
+    ppu->render.sp0.hit = true;
+    ppu->render.sp0.x = pixelX;
+    LogPrintDbg("SpriteZeroHit detected at x = %u\n", pixelX);
 }
 
 typedef struct _PixelSpDataSet {
@@ -263,32 +262,43 @@ static inline void DrawBackDropColor(const LuCNesPPU* ppu, const uint8_t y, cons
     VideoSetPixel(ppu->video, y, x, palette->colors[0].value);
 }
 
-static void PpuRenderPixel(LuCNesPPU* ppu, const PPUTile* bgPtTable, uint8_t y, uint8_t x)
+static void PpuRenderTiles(LuCNesPPU* ppu, const PPUTile* bgPtTable, uint8_t y, uint8_t endTileX)
 {
     const PPUReg* reg = ppu->reg;
-    bool bgEnabled = (reg->mask & PPU_BACKGROUND_ENABLE_MASK) &&
-                     (reg->mask & PPU_BACKGROUND_LEFT_ENABLE_MASK || x > PPU_MASK_LEFTMOST_PIXELS - 1);
-    bool spEnabled = (reg->mask & PPU_SPRITE_ENABLE_MASK) &&
-                     (reg->mask & PPU_SPRITE_LEFT_ENABLE_MASK || x > PPU_MASK_LEFTMOST_PIXELS - 1);
+    uint16_t* lastTileX = &ppu->render.lastTileX;
+    bool bgMask = reg->mask & PPU_BACKGROUND_ENABLE_MASK,
+         spMask = reg->mask & PPU_SPRITE_ENABLE_MASK;
 
-    if (likely(bgEnabled)) {
-        PixelBgDataSet bgPixel = GetBackgroundPixel(ppu, bgPtTable, x);
-        PixelSpDataSet spPixel = { .byte = ppu->render.lineSprites[x] };
+    for (; *lastTileX < endTileX; (*lastTileX)++) {
+        uint8_t x = *lastTileX << PPU_TILE_COLUMN_BIT;
+        bool bgEnabled = bgMask && (*lastTileX || (reg->mask & PPU_BACKGROUND_LEFT_ENABLE_MASK)),
+             spEnabled = spMask && (*lastTileX || (reg->mask & PPU_SPRITE_LEFT_ENABLE_MASK));
+        for (uint8_t offs = 0; offs < PPU_TILE_COLUMN_NUM; offs++, x++) {
+            if (likely(bgEnabled)) {
+                PixelBgDataSet bgPixel = GetBackgroundPixel(ppu, bgPtTable, x);
+                PixelSpDataSet spPixel = { .byte = ppu->render.lineSprites[x] };
+                if (unlikely(spEnabled && spPixel.byte && spPixel.colorIdx)) {
+                    if (spPixel.sp0 && bgPixel.colorIdx)
+                        SpriteZeroHitUpdate(ppu, x);
 
-        if (unlikely(spEnabled && spPixel.byte && spPixel.colorIdx)) {
-            if (spPixel.sp0 && bgPixel.colorIdx)
-                SpriteZeroHitHandler(ppu, x);
-
-            if (!bgPixel.colorIdx || spPixel.fgFlag)
-                return DrawSpPixelColor(ppu, y, x, &spPixel);
+                    if (!bgPixel.colorIdx || spPixel.fgFlag) {
+                        DrawSpPixelColor(ppu, y, x, &spPixel);
+                        continue;
+                    }
+                }
+                DrawBgPixelColor(ppu, y, x, &bgPixel);
+                continue;
+            } else if (spEnabled) {
+                PixelSpDataSet spPixel = { .byte = ppu->render.lineSprites[x] };
+                if (unlikely(spPixel.byte && spPixel.colorIdx)) {
+                    DrawSpPixelColor(ppu, y, x, &spPixel);
+                    continue;
+                }
+            }
+            DrawBackDropColor(ppu, y, x);
         }
-        return DrawBgPixelColor(ppu, y, x, &bgPixel);
-    } else if (spEnabled) {
-        PixelSpDataSet spPixel = { .byte = ppu->render.lineSprites[x] };
-        if (unlikely(spPixel.byte && spPixel.colorIdx))
-            return DrawSpPixelColor(ppu, y, x, &spPixel);
+        IRegIncX(&ppu->iRegs.cur);
     }
-    DrawBackDropColor(ppu, y, x);
 }
 
 static void PreRenderSpriteTile(LuCNesPPU* ppu, SpriteObj* sprite, uint8_t high, uint8_t low, bool sp0)
@@ -380,6 +390,12 @@ static void PreRenderSpriteLine(LuCNesPPU* ppu, const uint8_t y)
     }
 }
 
+static inline bool IsSpriteZeroHit(const LuCNesPPU* ppu, uint16_t end)
+{
+    uint8_t x = ppu->render.sp0.x;
+    return ppu->render.sp0.hit && x >= ppu->render.lastDot && x < end;
+}
+
 static void VisibleScanLineNoRender(LuCNesPPU* ppu)
 {
     if (ppu->dot > PPU_PIXELS_PER_LINE)
@@ -414,23 +430,21 @@ void PpuVisibleLineRender(LuCNesPPU* ppu)
 
         switch (ppu->render.lastDot) {
             case PPU_RENDER_TILE_PIXELS: {
-                PPUTile* bgPtTable = ppu->mmap.ptTileMirrTable[!!(reg->ctrl & PPU_BACKGROUND_TILE_MASK)];
                 uint16_t nextCycleStage = MIN(PPU_RENDER_INC_Y, ppu->dot);
 
-                for (; ppu->render.lastDot < nextCycleStage; ppu->render.lastDot++) {
-                    if (unlikely(!PpuRenderingEnabled(ppu))) {
-                        VisibleScanLineNoRender(ppu);
-                        if (likely(!ppu->render.rendToggleDot))
-                            ppu->render.lastDot = nextCycleStage;
-                        else
-                            ppu->render.lastDot++;
-                        break;
-                    }
-                    if (ppu->render.lastDot && !(ppu->render.lastDot & TILE_COLUMN_MASK))
-                        IRegIncX(&ppu->iRegs.cur);
+                if (likely(PpuRenderingEnabled(ppu))) {
+                    PPUTile* bgPtTable = ppu->mmap.ptTileMirrTable[!!(reg->ctrl & PPU_BACKGROUND_TILE_MASK)];
+                    const uint8_t endTileX = DIV_ROUND_UP(nextCycleStage, PPU_TILE_COLUMN_NUM);
 
-                    PpuRenderPixel(ppu, bgPtTable, ppu->scanLine, ppu->render.lastDot);
+                    PpuRenderTiles(ppu, bgPtTable, ppu->scanLine, MIN(endTileX + 2, PPU_LINE_TILES));
+                } else
+                    VisibleScanLineNoRender(ppu);
+
+                if (IsSpriteZeroHit(ppu, nextCycleStage)) {
+                    LogPrintDbg("SpriteZeroHit set: %d\n", ppu->render.lastDot);
+                    ppu->reg->status |= PPU_SPRITE0_MASK;
                 }
+                ppu->render.lastDot = nextCycleStage;
             }
                 break;
             case PPU_RENDER_INC_Y:
@@ -442,6 +456,8 @@ void PpuVisibleLineRender(LuCNesPPU* ppu)
                     PreRenderSpriteLine(ppu, ppu->scanLine);
                     IRegIncY(&ppu->iRegs.cur);
                 }
+                ppu->render.lastTileX = 0;
+                ppu->render.sp0.hit = false;
                 ppu->render.lastDot++;
                 break;
             case PPU_RENDER_ASSIGN_X:

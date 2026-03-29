@@ -149,6 +149,11 @@ typedef struct _CNesPPU {
         uint16_t lastDot;
         uint16_t rendToggleDot; /* PPU dot when rendering was last toggled */
         uint8_t lineSprites[PPU_PIXELS_PER_LINE];
+        uint16_t lastTileX;
+        struct {
+            bool hit;
+            uint8_t x;
+        } sp0;
     } render;
 
     VideoBackend* video;

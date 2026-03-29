@@ -65,6 +65,8 @@ typedef struct _region_t {
 
 #define CTZ(_b) __builtin_ctz(_b)
 
+#define DIV_ROUND_UP(_n, _d) (((_n) + (_d) - 1) / (_d))
+
 #define __maybe_unused __attribute__((unused))
 
 #define fallthrough __attribute__((__fallthrough__))
