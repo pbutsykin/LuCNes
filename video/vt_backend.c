@@ -101,11 +101,11 @@ static void handle_signal(int signo)
     raise(signo);
 }
 
-VideoBackend* VideoInit(const uint16_t width, const uint16_t height)
+VideoBackend* VideoInit(void)
 {
-    VideoBackend* video = MemAlloc(sizeof(VideoBackend) + sizeof(video->vbuf[0]) * width * height);
-
-    memset(video->vbuf, 63, width * height);  /* fill video->vbuf with black color idx */
+    VideoBackend* video = MemAlloc(sizeof(VideoBackend) +
+                                sizeof(video->vbuf[0]) * VIDEO_FRAME_WIDTH * VIDEO_FRAME_HEIGHT);
+    memset(video->vbuf, 63, VIDEO_FRAME_WIDTH * VIDEO_FRAME_HEIGHT); /* fill video->vbuf with black color idx */
 
     video->vt = vtr_canvas_create(STDOUT_FILENO);
     if (!video->vt) {
@@ -113,8 +113,8 @@ VideoBackend* VideoInit(const uint16_t width, const uint16_t height)
         goto fail0;
     }
     g_video = video;
-    video->width = MIN(width,  vtr_xdots(video->vt));
-    video->height = MIN(height, vtr_ydots(video->vt));
+    video->width = MIN(VIDEO_FRAME_WIDTH,  vtr_xdots(video->vt));
+    video->height = MIN(VIDEO_FRAME_HEIGHT, vtr_ydots(video->vt));
 
     if (vtr_reset(video->vt)) {
         LogPrintErr("vtr_reset failed\n");

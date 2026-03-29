@@ -13,7 +13,6 @@ typedef struct _VideoBackend {
     SDL_Window* wind;
     SDL_Renderer* rend;
     SDL_Texture* texture;
-    uint16_t width, height;
     uint16_t vbuf[];
 } VideoBackend;
 
@@ -29,11 +28,11 @@ void VideoSetPixel(VideoBackend* video, const uint8_t y, const uint8_t x, const 
         0xFFFF, 0xA7FF, 0xB77F, 0xDD5D, 0xFD5F, 0xFD56, 0xFE96, 0xFF74,
         0xFFB3, 0xD752, 0xA775, 0xA79B, 0x9FFF, 0xDEFB, 0x1082, 0x1082,
     };
-    const uint32_t idx = (uint32_t)(y * video->width) + x; /* XXX: Get rid of mul */
+    const uint32_t idx = (uint32_t)(y << VIDEO_FRAME_WIDTH_BITS) + x;
 
-    LogPrintAssert(idx < (video->width * video->height),
+    LogPrintAssert(idx < (VIDEO_FRAME_WIDTH * VIDEO_FRAME_HEIGHT),
                    "Access to video buffer out of bounds. idx: %u, y: %u, x: %u, vbuf size: %u\n",
-                   idx, y, x, (video->width * video->height));
+                   idx, y, x, (VIDEO_FRAME_WIDTH * VIDEO_FRAME_HEIGHT));
 
     LogPrintAssert(color < sizeof(RGB565Map)/sizeof(RGB565Map[0]), "Invalid color index for RGB565Map\n");
 
@@ -48,18 +47,15 @@ void VideoFrameFlush(VideoBackend* video)
         exit(0);
     }
 
-    SDL_UpdateTexture(video->texture, NULL, video->vbuf, sizeof(video->vbuf[0]) * video->width);
+    SDL_UpdateTexture(video->texture, NULL, video->vbuf, sizeof(video->vbuf[0]) * VIDEO_FRAME_WIDTH);
     SDL_RenderCopy(video->rend, video->texture, NULL, NULL);
     SDL_RenderPresent(video->rend);
 }
 
-VideoBackend* VideoInit(const uint16_t width, const uint16_t height)
+VideoBackend* VideoInit(void)
 {
-    VideoBackend* video = MemAlloc(sizeof(VideoBackend) + (sizeof(video->vbuf[0]) * width * height));
-
-    video->width = width;
-    video->height = height;
-
+    VideoBackend* video = MemAlloc(sizeof(VideoBackend) +
+                                   (sizeof(video->vbuf[0]) * VIDEO_FRAME_WIDTH * VIDEO_FRAME_HEIGHT));
     SDL_SetHint(SDL_HINT_VIDEODRIVER, "x11");
     if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
 
@@ -86,8 +82,8 @@ VideoBackend* VideoInit(const uint16_t width, const uint16_t height)
         goto fail2;
     }
 
-    video->texture = SDL_CreateTexture(video->rend, SDL_PIXELFORMAT_RGB565,
-                                       SDL_TEXTUREACCESS_STATIC, width, height);
+    video->texture = SDL_CreateTexture(video->rend, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STATIC,
+                                       VIDEO_FRAME_WIDTH, VIDEO_FRAME_HEIGHT);
     if (!video->texture) {
         LogPrintErr("Failed SDL_CreateTexture: %s\n", SDL_GetError());
         goto fail3;

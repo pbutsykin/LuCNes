@@ -566,7 +566,7 @@ LuCNesPPU* PpuInit(LuCNesCPU* cpu, RomDesc* rdesc, MapperObj* mapper, void* conn
         .scanLine = PPU_PRE_RENDER_LINE - 1,
     };
 
-    ppu->video = VideoInit(PPU_FRAME_WIDTH, PPU_FRAME_HEIGHT);
+    ppu->video = VideoInit();
     if (!ppu->video) {
         LogPrintErr("Can not initialize video subsystem.\n");
         goto fail1;

@@ -6,7 +6,11 @@
 
 typedef struct _VideoBackend VideoBackend;
 
-VideoBackend* VideoInit(const uint16_t width, const uint16_t height);
+#define VIDEO_FRAME_WIDTH_BITS 8
+#define VIDEO_FRAME_WIDTH (1 << VIDEO_FRAME_WIDTH_BITS)
+#define VIDEO_FRAME_HEIGHT 240
+
+VideoBackend* VideoInit(void);
 
 void VideoFree(VideoBackend* video);
 
