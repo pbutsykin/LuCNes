@@ -186,8 +186,8 @@ typedef struct _PixelSpDataSet {
         struct {
             uint8_t colorIdx:2;
             uint8_t paletteIdx:2;
-            uint8_t fgFlag:1;
             uint8_t sp0:1;
+            uint8_t fgFlag:1;
             uint8_t unused:2;
         };
         uint8_t byte;
