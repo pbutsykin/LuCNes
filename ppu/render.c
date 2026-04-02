@@ -300,6 +300,13 @@ static inline void PpuRenderSpTile(const LuCNesPPU* ppu, uint8_t y, uint8_t x)
     }
 }
 
+static inline bool HasSpriteTileData(const LuCNesPPU* ppu, uint8_t x)
+{
+    uint64_t v;
+    memcpy(&v, &ppu->render.lineSprites[x], sizeof(v));
+    return !!v;
+}
+
 static void PpuRenderTiles(LuCNesPPU* ppu, uint8_t y, uint8_t endTileX)
 {
     const PPUReg* reg = ppu->reg;
@@ -310,6 +317,9 @@ static void PpuRenderTiles(LuCNesPPU* ppu, uint8_t y, uint8_t endTileX)
         uint8_t x = *lastTileX << PPU_TILE_COLUMN_BIT;
         bool bgEnabled = likely(bgMask) && (*lastTileX || (reg->mask & PPU_BACKGROUND_LEFT_ENABLE_MASK)),
              spEnabled = likely(spMask) && (*lastTileX || (reg->mask & PPU_SPRITE_LEFT_ENABLE_MASK));
+
+        if (likely(spEnabled))
+            spEnabled = HasSpriteTileData(ppu, x);
 
         if (likely(bgEnabled))
             PpuRenderBgTile(ppu, y, x, spEnabled);
