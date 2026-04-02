@@ -194,11 +194,6 @@ typedef struct _PixelSpDataSet {
     };
 } __attribute__((packed)) PixelSpDataSet;
 
-typedef struct _PixelBgDataSet {
-    uint8_t colorIdx;
-    uint8_t paletteIdx;
-} PixelBgDataSet;
-
 static inline void IRegIncX(VRAMAddrReg* current)
 {
     uint8_t tileX = current->tileX + 1;
@@ -223,32 +218,6 @@ static inline void IRegIncY(VRAMAddrReg* current)
     current->fineY = fineY & TILE_ROW_MASK;
 }
 
-static PixelBgDataSet GetBackgroundPixel(const LuCNesPPU* ppu, const PPUTile* bgPtTable, uint8_t x)
-{
-    VRAMAddrReg cur = ppu->iRegs.cur;
-    if ((x ^ (x + ppu->iRegs.fineX)) & ~TILE_COLUMN_MASK)
-        IRegIncX(&cur);
-
-    PPUNameTable* nt = ppu->mmap.ntMirrTable[cur.nt];
-    uint16_t ntIdx = (ppu->iRegs.cur.tileY << TILE_PER_ROW_BIT) + (cur.tileX & TILE_PER_ROW_MASK);
-    uint16_t tileIdx = nt->tiles[ntIdx];
-    uint8_t pixelColorIdx = GetTilePixel(&bgPtTable[tileIdx], ppu->iRegs.cur.fineY,
-                                         ~(x + ppu->iRegs.fineX) & TILE_COLUMN_MASK);
-
-    LogPrintAssert(pixelColorIdx < PPU_COLORS_PER_PALETTE, "Invalid color index for palette\n");
-    return (PixelBgDataSet) {
-        .colorIdx = pixelColorIdx,
-        .paletteIdx = pixelColorIdx ? getBgPaletteIdx(nt, ntIdx) : 0,
-    };
-}
-
-static inline void DrawBgPixelColor(const LuCNesPPU* ppu, const uint8_t y, const uint8_t x,
-                                    const PixelBgDataSet* pixel)
-{
-    PPUPalette* palette = LookupBgPalette(ppu, pixel->paletteIdx);
-    VideoSetPixel(ppu->video, y, x, palette->colors[pixel->colorIdx].value);
-}
-
 static inline void DrawSpPixelColor(const LuCNesPPU* ppu, const uint8_t y, const uint8_t x,
                                     const PixelSpDataSet* pixel)
 {
@@ -262,41 +231,93 @@ static inline void DrawBackDropColor(const LuCNesPPU* ppu, const uint8_t y, cons
     VideoSetPixel(ppu->video, y, x, palette->colors[0].value);
 }
 
-static void PpuRenderTiles(LuCNesPPU* ppu, const PPUTile* bgPtTable, uint8_t y, uint8_t endTileX)
+static inline PPUPalette GetBgTileData(const LuCNesPPU* ppu, VRAMAddrReg cur, uint8_t* high, uint8_t* low)
 {
-    const PPUReg* reg = ppu->reg;
-    uint16_t* lastTileX = &ppu->render.lastTileX;
-    bool bgMask = reg->mask & PPU_BACKGROUND_ENABLE_MASK,
-         spMask = reg->mask & PPU_SPRITE_ENABLE_MASK;
+    const PPUNameTable* nt = ppu->mmap.ntMirrTable[cur.nt];
+    const uint16_t ntIdx = (cur.tileY << TILE_PER_ROW_BIT) + cur.tileX;
+    const uint16_t tileIdx = nt->tiles[ntIdx];
+    const PPUTile* bgPtTable = ppu->mmap.ptTileMirrTable[!!(ppu->reg->ctrl & PPU_BACKGROUND_TILE_MASK)];
+    const PPUTile* tile = &bgPtTable[tileIdx];
 
-    for (; *lastTileX < endTileX; (*lastTileX)++) {
-        uint8_t x = *lastTileX << PPU_TILE_COLUMN_BIT;
-        bool bgEnabled = bgMask && (*lastTileX || (reg->mask & PPU_BACKGROUND_LEFT_ENABLE_MASK)),
-             spEnabled = spMask && (*lastTileX || (reg->mask & PPU_SPRITE_LEFT_ENABLE_MASK));
-        for (uint8_t offs = 0; offs < PPU_TILE_COLUMN_NUM; offs++, x++) {
-            if (likely(bgEnabled)) {
-                PixelBgDataSet bgPixel = GetBackgroundPixel(ppu, bgPtTable, x);
-                PixelSpDataSet spPixel = { .byte = ppu->render.lineSprites[x] };
-                if (unlikely(spEnabled && spPixel.byte && spPixel.colorIdx)) {
-                    if (spPixel.sp0 && bgPixel.colorIdx)
-                        SpriteZeroHitUpdate(ppu, x);
+    *high = tile->high[cur.fineY];
+    *low = tile->low[cur.fineY];
+    return *LookupBgPalette(ppu, getBgPaletteIdx(nt, ntIdx));
+}
 
-                    if (!bgPixel.colorIdx || spPixel.fgFlag) {
-                        DrawSpPixelColor(ppu, y, x, &spPixel);
-                        continue;
-                    }
-                }
-                DrawBgPixelColor(ppu, y, x, &bgPixel);
-                continue;
-            } else if (spEnabled) {
-                PixelSpDataSet spPixel = { .byte = ppu->render.lineSprites[x] };
-                if (unlikely(spPixel.byte && spPixel.colorIdx)) {
+static inline void PpuRenderBackDropTile(const LuCNesPPU* ppu, uint8_t y, uint8_t x)
+{
+    for (uint8_t offs = 0; offs < PPU_TILE_COLUMN_NUM; offs++, x++)
+        DrawBackDropColor(ppu, y, x);
+}
+
+static inline void PpuRenderBgTile(LuCNesPPU* ppu, uint8_t y, uint8_t x, bool spEnabled)
+{
+    const uint8_t fineX = ppu->iRegs.fineX;
+    const uint8_t crossAt = fineX ? PPU_TILE_COLUMN_NUM - fineX : PPU_TILE_COLUMN_NUM;
+    uint8_t high, low;
+    PPUPalette bgPal = GetBgTileData(ppu, ppu->iRegs.cur, &high, &low);
+
+    /* Empty tile */
+    if (likely(!(high | low) && !spEnabled && crossAt == PPU_TILE_COLUMN_NUM)) {
+        PpuRenderBackDropTile(ppu, y, x);
+        return;
+    }
+
+    for (uint8_t offs = 0; offs < PPU_TILE_COLUMN_NUM; offs++, x++) {
+        if (unlikely(offs == crossAt)) {
+            VRAMAddrReg cur = ppu->iRegs.cur;
+            IRegIncX(&cur);
+            bgPal = GetBgTileData(ppu, cur, &high, &low);
+        }
+
+        const uint8_t shift = ~(fineX + x) & TILE_COLUMN_MASK;
+        const uint8_t bgColorIdx = unlikely(high | low) ? GetPixelColorIdx(high, low, shift) : 0;
+        if (unlikely(spEnabled)) {
+            const PixelSpDataSet spPixel = { .byte = ppu->render.lineSprites[x] };
+            if (likely(spPixel.byte)) {
+                if (unlikely(spPixel.sp0) && bgColorIdx)
+                    SpriteZeroHitUpdate(ppu, x);
+
+                if (!bgColorIdx || spPixel.fgFlag) {
                     DrawSpPixelColor(ppu, y, x, &spPixel);
                     continue;
                 }
             }
-            DrawBackDropColor(ppu, y, x);
         }
+        VideoSetPixel(ppu->video, y, x, likely(bgColorIdx) ? bgPal.colors[bgColorIdx].value :
+                                                             LookupBgPalette(ppu, 0)->colors[0].value);
+    }
+}
+
+static inline void PpuRenderSpTile(const LuCNesPPU* ppu, uint8_t y, uint8_t x)
+{
+    for (uint8_t offs = 0; offs < PPU_TILE_COLUMN_NUM; offs++, x++) {
+        const PixelSpDataSet spPixel = { .byte = ppu->render.lineSprites[x] };
+        if (unlikely(spPixel.byte))
+            DrawSpPixelColor(ppu, y, x, &spPixel);
+        else
+            DrawBackDropColor(ppu, y, x);
+    }
+}
+
+static void PpuRenderTiles(LuCNesPPU* ppu, uint8_t y, uint8_t endTileX)
+{
+    const PPUReg* reg = ppu->reg;
+    const bool bgMask = reg->mask & PPU_BACKGROUND_ENABLE_MASK,
+               spMask = reg->mask & PPU_SPRITE_ENABLE_MASK;
+
+    for (uint16_t* lastTileX = &ppu->render.lastTileX; *lastTileX < endTileX; (*lastTileX)++) {
+        uint8_t x = *lastTileX << PPU_TILE_COLUMN_BIT;
+        bool bgEnabled = likely(bgMask) && (*lastTileX || (reg->mask & PPU_BACKGROUND_LEFT_ENABLE_MASK)),
+             spEnabled = likely(spMask) && (*lastTileX || (reg->mask & PPU_SPRITE_LEFT_ENABLE_MASK));
+
+        if (likely(bgEnabled))
+            PpuRenderBgTile(ppu, y, x, spEnabled);
+        else if (spEnabled)
+            PpuRenderSpTile(ppu, y, x);
+        else
+            PpuRenderBackDropTile(ppu, y, x);
+
         IRegIncX(&ppu->iRegs.cur);
     }
 }
@@ -433,10 +454,9 @@ void PpuVisibleLineRender(LuCNesPPU* ppu)
                 uint16_t nextCycleStage = MIN(PPU_RENDER_INC_Y, ppu->dot);
 
                 if (likely(PpuRenderingEnabled(ppu))) {
-                    PPUTile* bgPtTable = ppu->mmap.ptTileMirrTable[!!(reg->ctrl & PPU_BACKGROUND_TILE_MASK)];
                     const uint8_t endTileX = DIV_ROUND_UP(nextCycleStage, PPU_TILE_COLUMN_NUM);
 
-                    PpuRenderTiles(ppu, bgPtTable, ppu->scanLine, MIN(endTileX + 2, PPU_LINE_TILES));
+                    PpuRenderTiles(ppu, ppu->scanLine, MIN(endTileX + 2, PPU_LINE_TILES));
                 } else
                     VisibleScanLineNoRender(ppu);
 
