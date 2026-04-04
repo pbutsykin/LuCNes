@@ -251,6 +251,9 @@ inline uint8_t CpuMemRead8(MMap* mmap, uint16_t addr)
     if (likely(addr >= PRG_ADDR))
         return *MMapPrgResolve(mmap, addr);
 
+    if (likely(addr <= CPU_RAM_END_ADDR))
+        return mmap->ram[addr];
+
     CpuMappedDevMemory mdev = {
         .cpuRead = CpuDevMemReadN,
     };
@@ -283,7 +286,7 @@ inline void CpuMemWrite8(MMap* mmap, uint16_t addr, uint8_t val)
     cpu->ioInsnCycles++;
 
     if (likely(addr <= CPU_RAM_END_ADDR)) {
-        *(mmap->ram + addr) = val;
+        mmap->ram[addr] = val;
         return;
     }
 
