@@ -77,12 +77,55 @@ static void ApuSweepCalcTarget(APUStatePulse* pulse, APUChannelPulse* reg, bool 
                          pulse->sweep.targetPeriod > SWEEP_OVERFLOW);
 }
 
+static uint8_t ApuPulseOutput(APUStatePulse* pulse, APUChannelPulse* reg)
+{
+    /* Pulse duty sequences */
+    static const uint8_t dutyTable[4][8] = {
+        {0, 1, 0, 0, 0, 0, 0, 0}, /* 12.5% */
+        {0, 1, 1, 0, 0, 0, 0, 0}, /* 25% */
+        {0, 1, 1, 1, 1, 0, 0, 0}, /* 50% */
+        {1, 0, 0, 1, 1, 1, 1, 1}  /* 75% (inverted 25%) */
+    };
+
+    if (pulse->sweep.mute)
+        return 0;
+
+    if (!pulse->lengthCounter)
+        return 0;
+
+    if (!dutyTable[reg->duty][pulse->dutyIdx])
+        return 0;
+
+    /* Output envelope or constant volume */
+    return reg->cvFlag ? reg->volume : pulse->envelope.decay;
+}
+
+static uint8_t ApuTriangleOutput(APUStateTriangle* tri)
+{
+#define TRI_ULTRASONIC_PERIOD_THRESHOLD 2
+#define TRI_OUTPUT_MIDPOINT_LEVEL 7
+
+    /* TODO: Add high pass and low pass filter instead of this hack. */
+    if (tri->timer.period < TRI_ULTRASONIC_PERIOD_THRESHOLD)
+        return TRI_OUTPUT_MIDPOINT_LEVEL; /* Output mid-point to avoid pops */
+
+    /* 32-step triangle sequence function */
+    return (tri->sequenceIdx & 0x10 ? tri->sequenceIdx : ~tri->sequenceIdx) & 0xF;
+}
+
+static uint8_t ApuNoiseOutput(APUStateNoise* noise, APUChannelNoise* reg)
+{
+    if (!noise->lengthCounter)
+        return 0;
+
+    /* If Bit 0 of the shift register is set, output is 0 */
+    if (noise->shiftReg & 1)
+        return 0;
+
+    return reg->cvFlag ? reg->volume : noise->envelope.decay;
+}
+
 static void ApuUpdateHalfRateMix(LuCNesAPU* apu);
-static uint8_t ApuPulseOutput(APUStatePulse* pulse, APUChannelPulse* reg);
-static uint8_t ApuTriangleOutput(APUStateTriangle* tri);
-static uint8_t ApuNoiseOutput(APUStateNoise* noise, APUChannelNoise* reg);
-static void ApuQuarterFrameTick(APUReg* reg, APUState* state);
-static void ApuHalfFrameTick(APUReg* reg, APUState* state);
 
 /* Noise period lookup table (NTSC) */
 static const uint16_t noisePeriodTable[16] = {
@@ -561,54 +604,6 @@ static void ApuFrameCounterTick(LuCNesAPU* apu)
         frame->step = 0;
         frame->countdown = 0;
     }
-}
-
-static uint8_t ApuPulseOutput(APUStatePulse* pulse, APUChannelPulse* reg)
-{
-    /* Pulse duty sequences */
-    static const uint8_t dutyTable[4][8] = {
-        {0, 1, 0, 0, 0, 0, 0, 0}, /* 12.5% */
-        {0, 1, 1, 0, 0, 0, 0, 0}, /* 25% */
-        {0, 1, 1, 1, 1, 0, 0, 0}, /* 50% */
-        {1, 0, 0, 1, 1, 1, 1, 1}  /* 75% (inverted 25%) */
-    };
-
-    if (pulse->sweep.mute)
-        return 0;
-
-    if (!pulse->lengthCounter)
-        return 0;
-
-    if (!dutyTable[reg->duty][pulse->dutyIdx])
-        return 0;
-
-    /* Output envelope or constant volume */
-    return reg->cvFlag ? reg->volume : pulse->envelope.decay;
-}
-
-static uint8_t ApuTriangleOutput(APUStateTriangle* tri)
-{
-#define TRI_ULTRASONIC_PERIOD_THRESHOLD 2
-#define TRI_OUTPUT_MIDPOINT_LEVEL 7
-
-    /* TODO: Add high pass and low pass filter instead of this hack. */
-    if (tri->timer.period < TRI_ULTRASONIC_PERIOD_THRESHOLD)
-        return TRI_OUTPUT_MIDPOINT_LEVEL; /* Output mid-point to avoid pops */
-
-    /* 32-step triangle sequence function */
-    return (tri->sequenceIdx & 0x10 ? tri->sequenceIdx : ~tri->sequenceIdx) & 0xF;
-}
-
-static uint8_t ApuNoiseOutput(APUStateNoise* noise, APUChannelNoise* reg)
-{
-    if (!noise->lengthCounter)
-        return 0;
-
-    /* If Bit 0 of the shift register is set, output is 0 */
-    if (noise->shiftReg & 1)
-        return 0;
-
-    return reg->cvFlag ? reg->volume : noise->envelope.decay;
 }
 
 /* Non-linear mixing lookup tables */
