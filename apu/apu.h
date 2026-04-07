@@ -186,6 +186,7 @@ typedef struct _APUStatePulse {
     APUSweep sweep;
     uint8_t dutyIdx; /* sequencer */
     uint8_t lengthCounter;
+    uint8_t output;
 } APUStatePulse;
 
 typedef struct _APUStateTriangle {
@@ -193,6 +194,7 @@ typedef struct _APUStateTriangle {
     uint8_t sequenceIdx;
     uint8_t lengthCounter;
     uint8_t linearCounter;
+    uint8_t output;
     bool linearReload;
 } APUStateTriangle;
 
@@ -201,6 +203,7 @@ typedef struct _APUStateNoise {
     APUEnvelope envelope;
     uint16_t shiftReg;
     uint8_t lengthCounter;
+    uint8_t output;
 } APUStateNoise;
 
 typedef struct _APUStateDMC {

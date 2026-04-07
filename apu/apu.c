@@ -77,7 +77,10 @@ static void ApuSweepCalcTarget(APUStatePulse* pulse, APUChannelPulse* reg, bool 
                          pulse->sweep.targetPeriod > SWEEP_OVERFLOW);
 }
 
-static void ApuUpdateHalfRateMix(LuCNesAPU* apu, APUReg* reg, APUState* state);
+static void ApuUpdateHalfRateMix(LuCNesAPU* apu);
+static uint8_t ApuPulseOutput(APUStatePulse* pulse, APUChannelPulse* reg);
+static uint8_t ApuTriangleOutput(APUStateTriangle* tri);
+static uint8_t ApuNoiseOutput(APUStateNoise* noise, APUChannelNoise* reg);
 static void ApuQuarterFrameTick(APUReg* reg, APUState* state);
 static void ApuHalfFrameTick(APUReg* reg, APUState* state);
 
@@ -257,7 +260,11 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             LogPrintAssert(0, "Invalid APU register: %x\n", regOffs);
             break;
     }
-    ApuUpdateHalfRateMix(apu, reg, &apu->state);
+    apu->state.pulse1.output = ApuPulseOutput(&apu->state.pulse1, &reg->pulse1);
+    apu->state.pulse2.output = ApuPulseOutput(&apu->state.pulse2, &reg->pulse2);
+    apu->state.triangle.output = ApuTriangleOutput(&apu->state.triangle);
+    apu->state.noise.output = ApuNoiseOutput(&apu->state.noise, &reg->noise);
+    ApuUpdateHalfRateMix(apu);
 }
 
 bool ApuCheckIRQ(LuCNesAPU* apu)
@@ -298,7 +305,7 @@ void* ApuRegRead(void* ctx, MMap* mmap, uint8_t* addr)
     return addr;
 }
 
-static void ApuPulseTick(APUStatePulse* pulse)
+static void ApuPulseTick(APUStatePulse* pulse, APUChannelPulse* reg)
 {
     /* https://www.nesdev.org/wiki/APU_Pulse
      *
@@ -312,6 +319,7 @@ static void ApuPulseTick(APUStatePulse* pulse)
     else {
         pulse->timer.countdown = pulse->timer.period;
         pulse->dutyIdx = (pulse->dutyIdx - 1) & 7;
+        pulse->output = ApuPulseOutput(pulse, reg);
     }
 }
 
@@ -322,8 +330,10 @@ static void ApuTriangleTick(APUStateTriangle* tri)
     else {
         tri->timer.countdown = tri->timer.period;
         /* Only step if length counter and linear counter are non-zero */
-        if (tri->lengthCounter && tri->linearCounter)
+        if (tri->lengthCounter && tri->linearCounter) {
             tri->sequenceIdx = (tri->sequenceIdx + 1) & 31;
+            tri->output = ApuTriangleOutput(tri);
+        }
     }
 }
 
@@ -342,6 +352,8 @@ static void ApuNoiseTick(APUStateNoise* noise, APUChannelNoise* reg)
         noise->timer.countdown = noise->timer.period;
         noise->shiftReg >>= 1;
         noise->shiftReg |= feedback << NOISE_LFSR_LEFTMOST_BIT;
+        if (noise->lengthCounter)
+            noise->output = ApuNoiseOutput(noise, reg);
     }
 }
 
@@ -481,6 +493,9 @@ static void ApuQuarterFrameTick(APUReg* reg, APUState* state)
     ApuEnvelopeTick(&state->pulse2.envelope, reg->pulse2.volume, reg->pulse2.lcFlag);
     ApuEnvelopeTick(&state->noise.envelope, reg->noise.volume, reg->noise.lcFlag);
     ApuLinearCounterTick(&state->triangle, &reg->triangle);
+    state->pulse1.output = ApuPulseOutput(&state->pulse1, &reg->pulse1);
+    state->pulse2.output = ApuPulseOutput(&state->pulse2, &reg->pulse2);
+    state->noise.output = ApuNoiseOutput(&state->noise, &reg->noise);
 }
 
 static void ApuHalfFrameTick(APUReg* reg, APUState* state)
@@ -492,6 +507,9 @@ static void ApuHalfFrameTick(APUReg* reg, APUState* state)
 
     ApuSweepTick(&state->pulse1, &reg->pulse1, true);
     ApuSweepTick(&state->pulse2, &reg->pulse2, false);
+    state->pulse1.output = ApuPulseOutput(&state->pulse1, &reg->pulse1);
+    state->pulse2.output = ApuPulseOutput(&state->pulse2, &reg->pulse2);
+    state->noise.output = ApuNoiseOutput(&state->noise, &reg->noise);
 }
 
 static void ApuFrameCounterTick(LuCNesAPU* apu)
@@ -545,7 +563,7 @@ static void ApuFrameCounterTick(LuCNesAPU* apu)
     }
 }
 
-static uint8_t ApuPulseOutput(APUChannelPulse* reg, APUStatePulse* pulse)
+static uint8_t ApuPulseOutput(APUStatePulse* pulse, APUChannelPulse* reg)
 {
     /* Pulse duty sequences */
     static const uint8_t dutyTable[4][8] = {
@@ -581,7 +599,7 @@ static uint8_t ApuTriangleOutput(APUStateTriangle* tri)
     return (tri->sequenceIdx & 0x10 ? tri->sequenceIdx : ~tri->sequenceIdx) & 0xF;
 }
 
-static uint8_t ApuNoiseOutput(APUChannelNoise* reg, APUStateNoise* noise)
+static uint8_t ApuNoiseOutput(APUStateNoise* noise, APUChannelNoise* reg)
 {
     if (!noise->lengthCounter)
         return 0;
@@ -591,11 +609,6 @@ static uint8_t ApuNoiseOutput(APUChannelNoise* reg, APUStateNoise* noise)
         return 0;
 
     return reg->cvFlag ? reg->volume : noise->envelope.decay;
-}
-
-static inline uint8_t ApuDMCOutput(APUStateDMC* dmc)
-{
-    return dmc->outputLevel;
 }
 
 /* Non-linear mixing lookup tables */
@@ -641,20 +654,17 @@ static void ApuMixerInit(void)
 #define TND_MIX_IDX_TRIANGLE 3
 #define TND_MIX_IDX_NOISE    2
 
-static inline void ApuUpdateHalfRateMix(LuCNesAPU* apu, APUReg* reg, APUState* state)
+static inline void ApuUpdateHalfRateMix(LuCNesAPU* apu)
 {
-    uint8_t p1 = ApuPulseOutput(&reg->pulse1, &state->pulse1);
-    uint8_t p2 = ApuPulseOutput(&reg->pulse2, &state->pulse2);
+    const APUState* state = &apu->state;
 
-    apu->pulseMix = pulseTable[p1 + p2];
-    apu->tndIndexBase = TND_MIX_IDX_NOISE * ApuNoiseOutput(&reg->noise, &state->noise) +
-                         ApuDMCOutput(&state->dmc);
+    apu->pulseMix = pulseTable[state->pulse1.output + state->pulse2.output];
+    apu->tndIndexBase = TND_MIX_IDX_NOISE * state->noise.output + state->dmc.outputLevel;
 }
 
-static inline uint16_t ApuGetMixedSample(const LuCNesAPU* apu, APUState* state)
+static inline uint16_t ApuGetMixedSample(const LuCNesAPU* apu, const APUStateTriangle* triangle)
 {
-    return apu->pulseMix +
-           tndTable[TND_MIX_IDX_TRIANGLE * ApuTriangleOutput(&state->triangle) + apu->tndIndexBase];
+    return tndTable[apu->tndIndexBase + (triangle->output * TND_MIX_IDX_TRIANGLE)] + apu->pulseMix;
 }
 
 static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
@@ -674,12 +684,12 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
     if (unlikely(frame->pendingQuarter)) {
         frame->pendingQuarter = false;
         ApuQuarterFrameTick(reg, &apu->state);
-        ApuUpdateHalfRateMix(apu, reg, &apu->state);
+        ApuUpdateHalfRateMix(apu);
     }
     if (unlikely(frame->pendingHalf)) {
         frame->pendingHalf = false;
         ApuHalfFrameTick(reg, &apu->state);
-        ApuUpdateHalfRateMix(apu, reg, &apu->state);
+        ApuUpdateHalfRateMix(apu);
     }
     if (unlikely(frame->resetDelay && !--frame->resetDelay)) {
         frame->countdown = 0;
@@ -688,7 +698,7 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
         if (reg->frameCounter.mode) {
             ApuQuarterFrameTick(reg, &apu->state);
             ApuHalfFrameTick(reg, &apu->state);
-            ApuUpdateHalfRateMix(apu, reg, &apu->state);
+            ApuUpdateHalfRateMix(apu);
         }
     }
 }
@@ -705,17 +715,17 @@ void ApuTicksExecute(LuCNesAPU* apu, const uint8_t cpuCycles)
         /* APU runs at half CPU rate for sequencer/pulse/noise/DMC */
         if (apu->cycles2x & 1) {
             ApuFrameCounterTick(apu);
-            ApuPulseTick(&state->pulse1);
-            ApuPulseTick(&state->pulse2);
+            ApuPulseTick(&state->pulse1, &reg->pulse1);
+            ApuPulseTick(&state->pulse2, &reg->pulse2);
             ApuNoiseTick(&state->noise, &reg->noise);
             ApuDMCTick(apu);
-            ApuUpdateHalfRateMix(apu, reg, state);
+            ApuUpdateHalfRateMix(apu);
         }
         /* Triangle runs at CPU rate */
         ApuTriangleTick(&state->triangle);
 
         /* Mix and accumulate channel outputs */
-        apu->sampleAccum += ApuGetMixedSample(apu, state);
+        apu->sampleAccum += ApuGetMixedSample(apu, &state->triangle);
         apu->sampleCount++;
 
         /* Output sample at target rate using precise fractional timing
@@ -762,9 +772,12 @@ LuCNesAPU* ApuInit(LuCNesCPU* cpu, void* connector)
     /* On power-up, the shift register is loaded with the value 1.
      * Timer starts at rate 0 period (noisePeriodTable[0]).
      */
+    apu->state.triangle.output = ApuTriangleOutput(&apu->state.triangle);
+
     apu->state.noise.shiftReg = 1;
     apu->state.noise.timer.period = noisePeriodTable[0];
     apu->state.noise.timer.countdown = noisePeriodTable[0];
+    apu->state.noise.output = ApuNoiseOutput(&apu->state.noise, &apu->reg->noise);
 
     /* DMC power-up state: buffer empty, ready for new byte, silence
      * Timer starts at rate 0 period (dmcRateTable[0]).
