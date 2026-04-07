@@ -77,6 +77,7 @@ static void ApuSweepCalcTarget(APUStatePulse* pulse, APUChannelPulse* reg, bool 
                          pulse->sweep.targetPeriod > SWEEP_OVERFLOW);
 }
 
+static void ApuUpdateHalfRateMix(LuCNesAPU* apu, APUReg* reg, APUState* state);
 static void ApuQuarterFrameTick(APUReg* reg, APUState* state);
 static void ApuHalfFrameTick(APUReg* reg, APUState* state);
 
@@ -256,6 +257,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             LogPrintAssert(0, "Invalid APU register: %x\n", regOffs);
             break;
     }
+    ApuUpdateHalfRateMix(apu, reg, &apu->state);
 }
 
 bool ApuCheckIRQ(LuCNesAPU* apu)
@@ -639,18 +641,20 @@ static void ApuMixerInit(void)
 #define TND_MIX_IDX_TRIANGLE 3
 #define TND_MIX_IDX_NOISE    2
 
-static inline uint16_t ApuGetMixedSample(APUReg* reg, APUState* state)
+static inline void ApuUpdateHalfRateMix(LuCNesAPU* apu, APUReg* reg, APUState* state)
 {
     uint8_t p1 = ApuPulseOutput(&reg->pulse1, &state->pulse1);
     uint8_t p2 = ApuPulseOutput(&reg->pulse2, &state->pulse2);
-    uint8_t tri = ApuTriangleOutput(&state->triangle);
-    uint8_t noise = ApuNoiseOutput(&reg->noise, &state->noise);
-    uint8_t dmc = ApuDMCOutput(&state->dmc);
 
-    uint16_t pulse_out = pulseTable[p1 + p2];
-    uint16_t tnd_out = tndTable[TND_MIX_IDX_TRIANGLE * tri + TND_MIX_IDX_NOISE * noise + dmc];
+    apu->pulseMix = pulseTable[p1 + p2];
+    apu->tndIndexBase = TND_MIX_IDX_NOISE * ApuNoiseOutput(&reg->noise, &state->noise) +
+                         ApuDMCOutput(&state->dmc);
+}
 
-    return pulse_out + tnd_out;
+static inline uint16_t ApuGetMixedSample(const LuCNesAPU* apu, APUState* state)
+{
+    return apu->pulseMix +
+           tndTable[TND_MIX_IDX_TRIANGLE * ApuTriangleOutput(&state->triangle) + apu->tndIndexBase];
 }
 
 static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
@@ -670,10 +674,12 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
     if (unlikely(frame->pendingQuarter)) {
         frame->pendingQuarter = false;
         ApuQuarterFrameTick(reg, &apu->state);
+        ApuUpdateHalfRateMix(apu, reg, &apu->state);
     }
     if (unlikely(frame->pendingHalf)) {
         frame->pendingHalf = false;
         ApuHalfFrameTick(reg, &apu->state);
+        ApuUpdateHalfRateMix(apu, reg, &apu->state);
     }
     if (unlikely(frame->resetDelay && !--frame->resetDelay)) {
         frame->countdown = 0;
@@ -682,6 +688,7 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
         if (reg->frameCounter.mode) {
             ApuQuarterFrameTick(reg, &apu->state);
             ApuHalfFrameTick(reg, &apu->state);
+            ApuUpdateHalfRateMix(apu, reg, &apu->state);
         }
     }
 }
@@ -702,19 +709,20 @@ void ApuTicksExecute(LuCNesAPU* apu, const uint8_t cpuCycles)
             ApuPulseTick(&state->pulse2);
             ApuNoiseTick(&state->noise, &reg->noise);
             ApuDMCTick(apu);
+            ApuUpdateHalfRateMix(apu, reg, state);
         }
         /* Triangle runs at CPU rate */
         ApuTriangleTick(&state->triangle);
 
-        /* Mix and accumulate sample */
-        apu->sampleAccum += ApuGetMixedSample(reg, state);
+        /* Mix and accumulate channel outputs */
+        apu->sampleAccum += ApuGetMixedSample(apu, state);
         apu->sampleCount++;
 
         /* Output sample at target rate using precise fractional timing
          * Add AUDIO_SAMPLE_RATE per cycle, output when >= CPU_CLOCK_RATE
          */
         apu->sampleCycleAccum += AUDIO_SAMPLE_RATE;
-        if (apu->sampleCycleAccum >= CPU_CLOCK_RATE) {
+        if (unlikely(apu->sampleCycleAccum >= CPU_CLOCK_RATE)) {
             int32_t avgSample = apu->sampleAccum / apu->sampleCount;
 
             /* Convert from unsigned [0, FP_SCALE] to signed [-32768, 32767] */

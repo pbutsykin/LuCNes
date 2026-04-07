@@ -243,6 +243,8 @@ typedef struct _CNesAPU {
     uint32_t sampleAccum;
     uint32_t sampleCount;
     uint32_t sampleCycleAccum;  /* Accumulated cycles for sample timing */
+    uint16_t pulseMix;          /* Pulse mix (changes on half-cycles) */
+    uint8_t  tndIndexBase;      /* 2 noise + dmc index (changes on half-cycles) */
 
     AudioBackend* audio;
     CNesConnector* con;
