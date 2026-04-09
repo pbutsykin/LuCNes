@@ -100,6 +100,9 @@ static uint8_t ApuPulseOutput(APUStatePulse* pulse, APUChannelPulse* reg)
     return reg->cvFlag ? reg->volume : pulse->envelope.decay;
 }
 
+#define TND_MIX_IDX_TRIANGLE 3
+#define TND_MIX_IDX_NOISE    2
+
 static uint8_t ApuTriangleOutput(APUStateTriangle* tri)
 {
 #define TRI_ULTRASONIC_PERIOD_THRESHOLD 2
@@ -107,10 +110,11 @@ static uint8_t ApuTriangleOutput(APUStateTriangle* tri)
 
     /* TODO: Add high pass and low pass filter instead of this hack. */
     if (tri->timer.period < TRI_ULTRASONIC_PERIOD_THRESHOLD)
-        return TRI_OUTPUT_MIDPOINT_LEVEL; /* Output mid-point to avoid pops */
+        return TRI_OUTPUT_MIDPOINT_LEVEL * TND_MIX_IDX_TRIANGLE; /* Output mid-point to avoid pops */
 
     /* 32-step triangle sequence function */
-    return (tri->sequenceIdx & 0x10 ? tri->sequenceIdx : ~tri->sequenceIdx) & 0xF;
+    uint8_t output = (tri->sequenceIdx & 0x10 ? tri->sequenceIdx : ~tri->sequenceIdx) & 0xF;
+    return output * TND_MIX_IDX_TRIANGLE;
 }
 
 static uint8_t ApuNoiseOutput(APUStateNoise* noise, APUChannelNoise* reg)
@@ -122,7 +126,7 @@ static uint8_t ApuNoiseOutput(APUStateNoise* noise, APUChannelNoise* reg)
     if (noise->shiftReg & 1)
         return 0;
 
-    return reg->cvFlag ? reg->volume : noise->envelope.decay;
+    return (reg->cvFlag ? reg->volume : noise->envelope.decay) * TND_MIX_IDX_NOISE;
 }
 
 static void ApuUpdateHalfRateMix(LuCNesAPU* apu);
@@ -646,20 +650,18 @@ static void ApuMixerInit(void)
  * those fractional weights are approximated by small integers to form a compact index:
  *   tndIndex = 3*triangle + 2*noise + dmc
  */
-#define TND_MIX_IDX_TRIANGLE 3
-#define TND_MIX_IDX_NOISE    2
 
 static inline void ApuUpdateHalfRateMix(LuCNesAPU* apu)
 {
     const APUState* state = &apu->state;
 
     apu->pulseMix = pulseTable[state->pulse1.output + state->pulse2.output];
-    apu->tndIndexBase = TND_MIX_IDX_NOISE * state->noise.output + state->dmc.outputLevel;
+    apu->tndIndexBase = state->noise.output + state->dmc.outputLevel;
 }
 
 static inline uint16_t ApuGetMixedSample(const LuCNesAPU* apu, const APUStateTriangle* triangle)
 {
-    return tndTable[apu->tndIndexBase + (triangle->output * TND_MIX_IDX_TRIANGLE)] + apu->pulseMix;
+    return tndTable[apu->tndIndexBase + triangle->output] + apu->pulseMix;
 }
 
 static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
