@@ -4,7 +4,7 @@
 #include "config.h"
 #include <utils/utils.h>
 #include <stdlib.h>
-#include <argp.h>
+#include <getopt.h>
 
 #include "connector.h"
 #include <rom/rom.h>
@@ -19,16 +19,6 @@
 #error "FAIL"
 #endif
 
-static char doc[] = "LuCNes Test - NES emulator test runner";
-static char args_doc[] = "ROM_FILE";
-
-static struct argp_option options[] = {
-    {"cpu_addr",     'o', "OFFSET", 0, "CPU address offset (hex)", 0},
-    {"start_cycle",  's', "CYCLE",  0, "Start cycle (hex)", 0},
-    {"max_cycles",   'm', "CYCLES", 0, "Maximum cycles to run (hex)", 0},
-    {0}
-};
-
 struct arguments {
     char *file_path;
     uint16_t cpu_addr;
@@ -36,33 +26,41 @@ struct arguments {
     uint32_t max_cycles;
 };
 
-static error_t parse_opt(int key, char *arg, struct argp_state *state)
+static void usage(const char *prog)
 {
-    struct arguments *args = state->input;
+    fprintf(stderr, "Usage: %s [--cpu_addr OFFSET] [--start_cycle CYCLE] [--max_cycles CYCLES] ROM_FILE\n", prog);
+    exit(1);
+}
 
-    switch (key) {
-        case 'o':
-            args->cpu_addr = strtol(arg, NULL, 16);
-            break;
-        case 's':
-            args->start_cycle = strtol(arg, NULL, 16);
-            break;
-        case 'm':
-            args->max_cycles = strtol(arg, NULL, 16);
-            break;
-        case ARGP_KEY_ARG:
-            if (state->arg_num >= 1)
-                argp_usage(state); /* Too many args */
-            args->file_path = arg;
-            break;
-        case ARGP_KEY_END:
-            if (state->arg_num < 1)
-                argp_usage(state); /* Not enough args */
-            break;
-        default:
-            return ARGP_ERR_UNKNOWN;
+static void parse_args(int argc, char **argv, struct arguments *args)
+{
+    static struct option options[] = {
+        {"cpu_addr",    required_argument, NULL, 'o'},
+        {"start_cycle", required_argument, NULL, 's'},
+        {"max_cycles",  required_argument, NULL, 'm'},
+        {NULL, 0, NULL, 0}
+    };
+    int opt;
+
+    while ((opt = getopt_long(argc, argv, "o:s:m:", options, NULL)) != -1) {
+        switch (opt) {
+            case 'o':
+                args->cpu_addr = strtol(optarg, NULL, 16);
+                break;
+            case 's':
+                args->start_cycle = strtol(optarg, NULL, 16);
+                break;
+            case 'm':
+                args->max_cycles = strtol(optarg, NULL, 16);
+                break;
+            default:
+                usage(argv[0]);
+        }
     }
-    return 0;
+
+    if (optind >= argc)
+        usage(argv[0]);
+    args->file_path = argv[optind];
 }
 
 static void PrintTestMessage(MMap* mmap)
@@ -91,12 +89,6 @@ static void PrintTestMessage(MMap* mmap)
 
 int main(int argc, char **argv)
 {
-    struct argp argp = {
-        .options = options,
-        .parser = parse_opt,
-        .args_doc = args_doc,
-        .doc = doc,
-    };
     struct arguments args = {
         .file_path = NULL,
     };
@@ -104,7 +96,7 @@ int main(int argc, char **argv)
         .pins = 0,
     };
 
-    argp_parse(&argp, argc, argv, 0, 0, &args);
+    parse_args(argc, argv, &args);
 
     connector.rdesc = LoadRomFile(args.file_path);
     if (!connector.rdesc) {
