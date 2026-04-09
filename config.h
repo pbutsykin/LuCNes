@@ -22,6 +22,12 @@
     #endif
 #endif /* UTILS */
 
+#ifdef CNES_PPU
+    #ifdef PPU
+    #define PPU_REG_TRACE false
+    #endif
+#endif /* CNES_PPU */
+
 #ifdef CNES_APU
     #ifdef APU
     #define APU_REG_TRACE false

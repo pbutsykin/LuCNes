@@ -138,20 +138,25 @@ enum {
 #define PPU_REG_MIRRORS 8 ... 0x1FFF
 } PPU_REG_OFFS;
 
-#define PPU_REG_TRACE false
 #if PPU_REG_TRACE
-#define RegTraceFmt(_rw, _reg, _cycles, _rval, _fmt, ...) \
-    do {                                                  \
-        printf("%c: %s: %02x"_fmt"\t(dot:%u)\n", (_rw) ? 'w' : 'r',  \
-               (_reg), (_rw) ? (val) : (_rval), ##__VA_ARGS__, _cycles); \
-        fflush(stdout);                                   \
-    } while(false)
+#define RegTraceFmt(_rw, _reg, _cycles, _fmt, ...) \
+    do {                                           \
+        printf("%c: %-8s: "_fmt" (dot:%u)\n", (_rw), (_reg), \
+               ##__VA_ARGS__, _cycles);            \
+        fflush(stdout); \
+    } while (false)
 #else
     #define RegTraceFmt(...) do {} while(0)
 #endif
 
-#define RegTrace(_rw, _reg, _cycles, _rval, ...) \
-    RegTraceFmt(_rw, _reg, _cycles, _rval, "", ##__VA_ARGS__)
+static inline void RegTrace(bool write, char* reg __maybe_unused, uint16_t cycles __maybe_unused,
+                            uint8_t val __maybe_unused, uint8_t old __maybe_unused)
+{
+    if (write)
+        RegTraceFmt('w', reg, cycles, "%02x => %02x    ", val, old);
+    else
+        RegTraceFmt('r', reg, cycles, "%02x          ", old);
+}
 
 #define PPU_PAGE_SIZE_BIT 10
 
@@ -232,7 +237,7 @@ static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t
 
     switch (regOffs) {
         case PPU_REG_CTRL: {
-            RegTrace(write, "ctrl", ppu->dot, reg->ctrl);
+            RegTrace(write, "ctrl", ppu->dot, val, reg->ctrl);
             LogPrintAssert(write, "Not implemented(read)!\n");
 
             /* At scanline 261 dot 1 PPU_VBLANK_MASK is cleared by PpuPreRenderLine().
@@ -257,7 +262,7 @@ static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t
             break;
         }
         case PPU_REG_MASK: {
-            RegTrace(write, "mask", ppu->dot, reg->mask);
+            RegTrace(write, "mask", ppu->dot, val, reg->mask);
             LogPrintAssert(write, "Not implemented(read)!\n");
 
             /* Toggling rendering takes effect (in ppu render) approximately 3-4 dots after
@@ -276,17 +281,17 @@ static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t
 
             retPtr = PpuStatusRead(ppu, reg);
 
-            RegTrace(write, "status", ppu->dot, *retPtr);
+            RegTrace(write, "status", ppu->dot, val, *retPtr);
             break;
         }
         case PPU_REG_OAM_ADDR: {
-            RegTrace(write, "oam.addr", ppu->dot, reg->oam.addr);
+            RegTrace(write, "oam.addr", ppu->dot, val, reg->oam.addr);
             LogPrintAssert(write, "Not implemented(read)!\n");
             reg->oam.addr = val;
             break;
         }
         case PPU_REG_OAM_DATA: {
-            RegTrace(write, "oam.data", ppu->dot, reg->oam.data);
+            RegTrace(write, "oam.data", ppu->dot, val, reg->oam.data);
             if (unlikely((reg->mask & PPU_RENDERING_ENABLED) && !PpuInVblank(ppu))) {
                 /* XXX: For emulation purposes, it is probably best to completely ignore writes
                  * during rendering. (https://wiki.nesdev.com/w/index.php/PPU_registers#OAMDATA)
@@ -307,7 +312,7 @@ static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t
              break;
         }
         case PPU_REG_SCROLL: {
-            RegTrace(write, "scroll", ppu->dot, reg->scroll);
+            RegTrace(write, "scroll", ppu->dot, val, reg->scroll);
             LogPrintAssert(write, "Not implemented(read)!\n");
 
             union {
@@ -339,7 +344,7 @@ static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t
             break;
         }
         case PPU_REG_ADDR: {
-            RegTrace(write, "addr", ppu->dot, reg->addr);
+            RegTrace(write, "addr", ppu->dot, val, reg->addr);
             LogPrintAssert(write, "Not implemented(read)!\n");
 
             reg->addr = val;
@@ -354,12 +359,14 @@ static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t
             break;
         }
         case PPU_REG_DATA: {
-            RegTraceFmt(write, "data", ppu->dot, ppu->mmap.ram[ppu->iRegs.cur.addr],
-                        " %s %04x", write ? "->" : "<-", ppu->iRegs.cur.addr);
+            uint8_t* ppuAddr = PpuAddrLookup(ppu);
+
+            RegTrace(write, "data", ppu->dot, val, reg->data);
+            RegTraceFmt(write ? 'w' : 'r', "data", ppu->dot, "[%02x %s %04x]", *ppuAddr,
+                        write ? "->" : "<-", ppu->iRegs.cur.addr);
+
             if (unlikely((reg->mask & PPU_RENDERING_ENABLED) && !PpuInVblank(ppu)))
                 LogPrintAssert(!write, "Write to PPUDATA during rendering!\n");
-
-            uint8_t* ppuAddr = PpuAddrLookup(ppu);
 
             if (likely(write)) {
                 reg->data = val;
@@ -409,7 +416,8 @@ void PpuDMAWrite(void* ctx, MMap* mmap, __maybe_unused uint8_t* addr, uint8_t va
     uint64_t cpuCycles = CpuReadCycles(con->cpu);
     uint8_t oddCycles = cpuCycles & 1, opCycles = 2;
 
-    RegTraceFmt(true, "dma", ppu->dot, 0, ": copy from 0x%04x", VAL_TO_CPU_OFFS(val));
+    RegTrace(true, "dma", ppu->dot, val, *mmap->dma);
+    RegTraceFmt('w', "dma", ppu->dot, "[copy %04x] ", VAL_TO_CPU_OFFS(val));
     *mmap->dma = val;
 
     LogPrintAssert(!ppu->reg->oam.addr, "OAMDMA is not allowed from non-zero oam addr: %x.\n", ppu->reg->oam.addr);
