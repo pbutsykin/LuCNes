@@ -22,6 +22,12 @@
     #endif
 #endif /* UTILS */
 
+#ifdef CNES_APU
+    #ifdef APU
+    #define APU_REG_TRACE false
+    #endif
+#endif /* CNES_APU */
+
 #ifndef HAVE_MMAP
 #define HAVE_MMAP 1
 #endif
