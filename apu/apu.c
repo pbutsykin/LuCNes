@@ -117,8 +117,27 @@ static uint8_t ApuPulseOutput(APUStatePulse* pulse, APUChannelPulse* reg)
     return reg->cvFlag ? reg->volume : pulse->envelope.decay;
 }
 
+
+/* Non-linear mixing lookup tables */
+static uint16_t pulseTable[31];
+static uint16_t tndTable[203];
+
 #define TND_MIX_IDX_TRIANGLE 3
 #define TND_MIX_IDX_NOISE    2
+
+/* The accurate model uses different per-channel conductance terms (Triangle/8227,
+ * Noise/12241, DMC/22638 in the common approximation). For the lookup-table variant,
+ * those fractional weights are approximated by small integers to form a compact index:
+ *   tndIndex = 3*triangle + 2*noise + dmc
+ */
+
+static inline uint16_t ApuGetMixedSample(const LuCNesAPU* apu)
+{
+    const APUState* state = &apu->state;
+    const uint16_t pulseMix = pulseTable[state->pulse1.output + state->pulse2.output];
+
+    return tndTable[apu->tndIndexBase + state->triangle.output] + pulseMix;
+}
 
 static uint8_t ApuTriangleOutput(APUStateTriangle* tri)
 {
@@ -145,8 +164,6 @@ static uint8_t ApuNoiseOutput(APUStateNoise* noise, APUChannelNoise* reg)
 
     return (reg->cvFlag ? reg->volume : noise->envelope.decay) * TND_MIX_IDX_NOISE;
 }
-
-static void ApuUpdateHalfRateMix(LuCNesAPU* apu);
 
 /* Noise period lookup table (NTSC) */
 static const uint16_t noisePeriodTable[16] = {
@@ -349,7 +366,8 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
     apu->state.pulse2.output = ApuPulseOutput(&apu->state.pulse2, &reg->pulse2);
     apu->state.triangle.output = ApuTriangleOutput(&apu->state.triangle);
     apu->state.noise.output = ApuNoiseOutput(&apu->state.noise, &reg->noise);
-    ApuUpdateHalfRateMix(apu);
+    apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
+    apu->outputMix = ApuGetMixedSample(apu);
 }
 
 bool ApuCheckIRQ(LuCNesAPU* apu)
@@ -417,8 +435,10 @@ static void ApuTriangleTick(APUStateTriangle* tri)
         tri->timer.countdown = tri->timer.period;
         /* Only step if length counter and linear counter are non-zero */
         if (tri->lengthCounter && tri->linearCounter) {
+            LuCNesAPU* apu = CONTAINER_OF(tri, LuCNesAPU, state.triangle);
             tri->sequenceIdx = (tri->sequenceIdx + 1) & 31;
             tri->output = ApuTriangleOutput(tri);
+            apu->outputMix = ApuGetMixedSample(apu);
         }
     }
 }
@@ -438,8 +458,11 @@ static void ApuNoiseTick(APUStateNoise* noise, APUChannelNoise* reg)
         noise->timer.countdown = noise->timer.period;
         noise->shiftReg >>= 1;
         noise->shiftReg |= feedback << NOISE_LFSR_LEFTMOST_BIT;
-        if (noise->lengthCounter)
+        if (noise->lengthCounter) {
+            LuCNesAPU* apu = CONTAINER_OF(noise, LuCNesAPU, state.noise);
             noise->output = ApuNoiseOutput(noise, reg);
+            apu->tndIndexBase = noise->output + apu->state.dmc.outputLevel;
+        }
     }
 }
 
@@ -452,11 +475,17 @@ static void DmcOutputTick(APUStateDMC* dmc)
      * If silence flag is clear, adjust output level based on bit 0 of shift register */
     if (!dmc->silence) {
         if (dmc->shiftReg & 1) {
-            if (dmc->outputLevel < DMC_OUTPUT_MAX - 1)
+            if (dmc->outputLevel < DMC_OUTPUT_MAX - 1) {
+                LuCNesAPU* apu = CONTAINER_OF(dmc, LuCNesAPU, state.dmc);
                 dmc->outputLevel += 2;
+                apu->tndIndexBase = apu->state.noise.output + dmc->outputLevel;
+            }
         } else {
-            if (dmc->outputLevel > DMC_OUTPUT_MIN + 1)
+            if (dmc->outputLevel > DMC_OUTPUT_MIN + 1) {
+                LuCNesAPU* apu = CONTAINER_OF(dmc, LuCNesAPU, state.dmc);
                 dmc->outputLevel -= 2;
+                apu->tndIndexBase = apu->state.noise.output + dmc->outputLevel;
+            }
         }
     }
     dmc->shiftReg >>= 1;
@@ -649,10 +678,6 @@ static void ApuFrameCounterTick(LuCNesAPU* apu)
     }
 }
 
-/* Non-linear mixing lookup tables */
-static uint16_t pulseTable[31];
-static uint16_t tndTable[203];
-
 /* Fixed-point scale factor (2^15) */
 #define FP_SCALE 32768LL
 
@@ -684,25 +709,6 @@ static void ApuMixerInit(void)
                                  (100 * (TND_MIX_DEN_BASE + MIX_DEN_OFFSET * i)));
 }
 
-/* The accurate model uses different per-channel conductance terms (Triangle/8227,
- * Noise/12241, DMC/22638 in the common approximation). For the lookup-table variant,
- * those fractional weights are approximated by small integers to form a compact index:
- *   tndIndex = 3*triangle + 2*noise + dmc
- */
-
-static inline void ApuUpdateHalfRateMix(LuCNesAPU* apu)
-{
-    const APUState* state = &apu->state;
-
-    apu->pulseMix = pulseTable[state->pulse1.output + state->pulse2.output];
-    apu->tndIndexBase = state->noise.output + state->dmc.outputLevel;
-}
-
-static inline uint16_t ApuGetMixedSample(const LuCNesAPU* apu, const APUStateTriangle* triangle)
-{
-    return tndTable[apu->tndIndexBase + triangle->output] + apu->pulseMix;
-}
-
 static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
 {
     APUReg* reg = apu->reg;
@@ -720,12 +726,14 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
     if (unlikely(frame->pendingQuarter)) {
         frame->pendingQuarter = false;
         ApuQuarterFrameTick(reg, &apu->state);
-        ApuUpdateHalfRateMix(apu);
+        apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
+        apu->outputMix = ApuGetMixedSample(apu);
     }
     if (unlikely(frame->pendingHalf)) {
         frame->pendingHalf = false;
         ApuHalfFrameTick(reg, &apu->state);
-        ApuUpdateHalfRateMix(apu);
+        apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
+        apu->outputMix = ApuGetMixedSample(apu);
     }
     if (unlikely(frame->resetDelay && !--frame->resetDelay)) {
         frame->countdown = 0;
@@ -734,7 +742,8 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
         if (reg->frameCounter.mode) {
             ApuQuarterFrameTick(reg, &apu->state);
             ApuHalfFrameTick(reg, &apu->state);
-            ApuUpdateHalfRateMix(apu);
+            apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
+            apu->outputMix = ApuGetMixedSample(apu);
         }
     }
 }
@@ -755,13 +764,13 @@ void ApuTicksExecute(LuCNesAPU* apu, const uint8_t cpuCycles)
             ApuPulseTick(&state->pulse2, &reg->pulse2);
             ApuNoiseTick(&state->noise, &reg->noise);
             ApuDMCTick(apu);
-            ApuUpdateHalfRateMix(apu);
+            apu->outputMix = ApuGetMixedSample(apu);
         }
         /* Triangle runs at CPU rate */
         ApuTriangleTick(&state->triangle);
 
         /* Mix and accumulate channel outputs */
-        apu->sampleAccum += ApuGetMixedSample(apu, &state->triangle);
+        apu->sampleAccum += apu->outputMix;
         apu->sampleCount++;
 
         /* Output sample at target rate using precise fractional timing
