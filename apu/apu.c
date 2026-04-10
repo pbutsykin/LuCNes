@@ -185,65 +185,66 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
 
     LuCNesAPU* apu = ctx;
     APUReg* reg = (APUReg*)mmap->apuReg;
+    APUState* state = &apu->state;
     uint16_t regOffs = addr - mmap->apuReg;
 
     switch (regOffs) {
         case APU_REG_PULSE1_R0:
             RegTraceW("pulse1.r0", apu->cycles2x, val, reg->pulse1.r0);
             reg->pulse1.r0 = val;
-            apu->state.pulse1.envelope.startFlag = true;
+            state->pulse1.envelope.startFlag = true;
             break;
         case APU_REG_PULSE1_R1:
             RegTraceW("pulse1.sweep", apu->cycles2x, val, reg->pulse1.r1);
             reg->pulse1.r1 = val;
-            apu->state.pulse1.sweep.reload = true;
+            state->pulse1.sweep.reload = true;
             break;
         case APU_REG_PULSE1_R2:
             RegTraceW("pulse1.r2", apu->cycles2x, val, reg->pulse1.r2);
             reg->pulse1.r2 = val;
-            apu->state.pulse1.timer.period = ApuPulseTimerRead(&reg->pulse1);
-            ApuSweepCalcTarget(&apu->state.pulse1, &reg->pulse1, true);
+            state->pulse1.timer.period = ApuPulseTimerRead(&reg->pulse1);
+            ApuSweepCalcTarget(&state->pulse1, &reg->pulse1, true);
             break;
         case APU_REG_PULSE1_R3:
             RegTraceW("pulse1.r3", apu->cycles2x, val, reg->pulse1.r3);
             reg->pulse1.r3 = val;
-            apu->state.pulse1.timer.period = ApuPulseTimerRead(&reg->pulse1);
-            apu->state.pulse1.dutyIdx = 0;
+            state->pulse1.timer.period = ApuPulseTimerRead(&reg->pulse1);
+            state->pulse1.dutyIdx = 0;
             if (reg->status.pulse1)
-                apu->state.pulse1.lengthCounter = lengthTable[reg->pulse1.lenghCount];
-            apu->state.pulse1.envelope.startFlag = true;
-            ApuSweepCalcTarget(&apu->state.pulse1, &reg->pulse1, true);
-            LogPrintDbg("pulse1: period=%x, length=%x\n",
-                        apu->state.pulse1.timer.period, apu->state.pulse1.lengthCounter);
+                state->pulse1.lengthCounter = lengthTable[reg->pulse1.lenghCount];
+            state->pulse1.envelope.startFlag = true;
+            ApuSweepCalcTarget(&state->pulse1, &reg->pulse1, true);
+            LogPrintDbg("pulse1: period=%x, length=%x\n", state->pulse1.timer.period,
+                        state->pulse1.lengthCounter);
             break;
 
         case APU_REG_PULSE2_R0:
             RegTraceW("pulse2.r0", apu->cycles2x, val, reg->pulse2.r0);
             reg->pulse2.r0 = val;
-            apu->state.pulse2.envelope.startFlag = true;
+            state->pulse2.envelope.startFlag = true;
             break;
         case APU_REG_PULSE2_R1:
             RegTraceW("pulse2.sweep", apu->cycles2x, val, reg->pulse2.r1);
             reg->pulse2.r1 = val;
-            apu->state.pulse2.sweep.reload = true;
+            state->pulse2.sweep.reload = true;
             break;
         case APU_REG_PULSE2_R2:
             RegTraceW("pulse2.r2", apu->cycles2x, val, reg->pulse2.r2);
             reg->pulse2.r2 = val;
-            apu->state.pulse2.timer.period = ApuPulseTimerRead(&reg->pulse2);
-            ApuSweepCalcTarget(&apu->state.pulse2, &reg->pulse2, false);
+            state->pulse2.timer.period = ApuPulseTimerRead(&reg->pulse2);
+            ApuSweepCalcTarget(&state->pulse2, &reg->pulse2, false);
             break;
         case APU_REG_PULSE2_R3:
             RegTraceW("pulse2.r3", apu->cycles2x, val, reg->pulse2.r3);
             reg->pulse2.r3 = val;
-            apu->state.pulse2.timer.period = ApuPulseTimerRead(&reg->pulse2);
-            apu->state.pulse2.dutyIdx = 0;
+            state->pulse2.timer.period = ApuPulseTimerRead(&reg->pulse2);
+            state->pulse2.dutyIdx = 0;
             if (reg->status.pulse2)
-                apu->state.pulse2.lengthCounter = lengthTable[reg->pulse2.lenghCount];
-            apu->state.pulse2.envelope.startFlag = true;
-            ApuSweepCalcTarget(&apu->state.pulse2, &reg->pulse2, false);
-            LogPrintDbg("pulse2: period=%x, length=%x\n",
-                        apu->state.pulse2.timer.period, apu->state.pulse2.lengthCounter);
+                state->pulse2.lengthCounter = lengthTable[reg->pulse2.lenghCount];
+            state->pulse2.envelope.startFlag = true;
+            ApuSweepCalcTarget(&state->pulse2, &reg->pulse2, false);
+            LogPrintDbg("pulse2: period=%x, length=%x\n", state->pulse2.timer.period,
+                        state->pulse2.lengthCounter);
             break;
 
         case APU_REG_TRI_R0:
@@ -257,23 +258,23 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
         case APU_REG_TRI_R2:
             RegTraceW("tri.r2", apu->cycles2x, val, reg->triangle.r2);
             reg->triangle.r2 = val;
-            apu->state.triangle.timer.period = ApuTriangleTimerRead(&reg->triangle);
+            state->triangle.timer.period = ApuTriangleTimerRead(&reg->triangle);
             break;
         case APU_REG_TRI_R3:
             RegTraceW("tri.r3", apu->cycles2x, val, reg->triangle.r3);
             reg->triangle.r3 = val;
-            apu->state.triangle.timer.period = ApuTriangleTimerRead(&reg->triangle);
+            state->triangle.timer.period = ApuTriangleTimerRead(&reg->triangle);
             if (reg->status.triangle)
-                apu->state.triangle.lengthCounter = lengthTable[reg->triangle.lenghCount];
-            apu->state.triangle.linearReload = true;
-            LogPrintDbg("triangle: period=%x, length=%x\n",
-                        apu->state.triangle.timer.period, apu->state.triangle.lengthCounter);
+                state->triangle.lengthCounter = lengthTable[reg->triangle.lenghCount];
+            state->triangle.linearReload = true;
+            LogPrintDbg("triangle: period=%x, length=%x\n", state->triangle.timer.period,
+                        state->triangle.lengthCounter);
             break;
 
         case APU_REG_NOISE_R0:
             RegTraceW("noise.r0", apu->cycles2x, val, reg->noise.r0);
             reg->noise.r0 = val;
-            apu->state.noise.envelope.startFlag = true;
+            state->noise.envelope.startFlag = true;
             break;
         case APU_REG_NOISE_R1:
             RegTraceW("noise.unused", apu->cycles2x, val, reg->noise.r1);
@@ -282,29 +283,29 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
         case APU_REG_NOISE_R2:
             RegTraceW("noise.period", apu->cycles2x, val, reg->noise.r2);
             reg->noise.r2 = val;
-            apu->state.noise.timer.period = noisePeriodTable[reg->noise.period];
+            state->noise.timer.period = noisePeriodTable[reg->noise.period];
             break;
         case APU_REG_NOISE_R3:
             RegTraceW("noise.length", apu->cycles2x, val, reg->noise.r3);
             reg->noise.r3 = val;
             if (reg->status.noise)
-                apu->state.noise.lengthCounter = lengthTable[reg->noise.lenghCount];
-            apu->state.noise.envelope.startFlag = true;
-            LogPrintDbg("noise: period=%x, length=%x\n",
-                        apu->state.noise.timer.period, apu->state.noise.lengthCounter);
+                state->noise.lengthCounter = lengthTable[reg->noise.lenghCount];
+            state->noise.envelope.startFlag = true;
+            LogPrintDbg("noise: period=%x, length=%x\n", state->noise.timer.period,
+                        state->noise.lengthCounter);
             break;
 
         case APU_REG_DMC_R0:
             RegTraceW("dmc.r0", apu->cycles2x, val, reg->dmc.r0);
             reg->dmc.r0 = val;
-            apu->state.dmc.timer.period = dmcRateTable[reg->dmc.rate];
+            state->dmc.timer.period = dmcRateTable[reg->dmc.rate];
             if (!reg->dmc.irqEnabled)
                 reg->status.dmcIrq = 0; /* Clear DMC IRQ flag */
             break;
         case APU_REG_DMC_R1:
             RegTraceW("dmc.load", apu->cycles2x, val, reg->dmc.r1);
             reg->dmc.r1 = val;
-            apu->state.dmc.outputLevel = reg->dmc.directLoad;
+            state->dmc.outputLevel = reg->dmc.directLoad;
             break;
         case APU_REG_DMC_R2:
             RegTraceW("dmc.addr", apu->cycles2x, val, reg->dmc.sampleAddr);
@@ -324,21 +325,21 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             reg->status = status;
 
             if (!status.pulse1)
-                apu->state.pulse1.lengthCounter = 0;
+                state->pulse1.lengthCounter = 0;
             if (!status.pulse2)
-                apu->state.pulse2.lengthCounter = 0;
+                state->pulse2.lengthCounter = 0;
             if (!status.triangle)
-                apu->state.triangle.lengthCounter = 0;
+                state->triangle.lengthCounter = 0;
             if (!status.noise)
-                apu->state.noise.lengthCounter = 0;
+                state->noise.lengthCounter = 0;
 
             if (!status.dmc)
-                apu->state.dmc.bytesRemaining = 0;
-            else if (!apu->state.dmc.bytesRemaining) {
+                state->dmc.bytesRemaining = 0;
+            else if (!state->dmc.bytesRemaining) {
                 /* Restart DMC sample */
-                apu->state.dmc.currAddr = (DMC_BASE_ADDR | ((uint16_t)reg->dmc.sampleAddr << 6)) &
-                                          DMC_ADDR_MASK;
-                apu->state.dmc.bytesRemaining = ((uint16_t)reg->dmc.sampleLen << 4) + 1;
+                state->dmc.currAddr = (DMC_BASE_ADDR | ((uint16_t)reg->dmc.sampleAddr << 6)) &
+                                      DMC_ADDR_MASK;
+                state->dmc.bytesRemaining = ((uint16_t)reg->dmc.sampleLen << 4) + 1;
             }
             /* Clear DMC IRQ flag */
             reg->status.dmcIrq = 0;
@@ -356,17 +357,17 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
              * - 4 cycles if write occurs between APU cycles (even cycles2x)
              * https://www.nesdev.org/wiki/APU_Frame_Counter
              */
-            apu->state.frame.resetDelay = (apu->cycles2x & 1) ? 3 : 4;
+            state->frame.resetDelay = (apu->cycles2x & 1) ? 3 : 4;
             break;
         default:
             LogPrintAssert(0, "Invalid APU register: %x\n", regOffs);
             break;
     }
-    apu->state.pulse1.output = ApuPulseOutput(&apu->state.pulse1, &reg->pulse1);
-    apu->state.pulse2.output = ApuPulseOutput(&apu->state.pulse2, &reg->pulse2);
-    apu->state.triangle.output = ApuTriangleOutput(&apu->state.triangle);
-    apu->state.noise.output = ApuNoiseOutput(&apu->state.noise, &reg->noise);
-    apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
+    state->pulse1.output = ApuPulseOutput(&state->pulse1, &reg->pulse1);
+    state->pulse2.output = ApuPulseOutput(&state->pulse2, &reg->pulse2);
+    state->triangle.output = ApuTriangleOutput(&state->triangle);
+    state->noise.output = ApuNoiseOutput(&state->noise, &reg->noise);
+    apu->tndIndexBase = state->noise.output + state->dmc.outputLevel;
     apu->outputMix = ApuGetMixedSample(apu);
 }
 
@@ -383,13 +384,14 @@ void* ApuRegRead(void* ctx, MMap* mmap, uint8_t* addr)
         static uint8_t statusResult;
         LuCNesAPU* apu = ctx;
         APUReg* reg = (APUReg*)mmap->apuReg;
+        APUState* state = &apu->state;
         APUStatusReg status = reg->status;
 
-        status.pulse1 = !!apu->state.pulse1.lengthCounter;
-        status.pulse2 = !!apu->state.pulse2.lengthCounter;
-        status.triangle = !!apu->state.triangle.lengthCounter;
-        status.noise = !!apu->state.noise.lengthCounter;
-        status.dmc = !!apu->state.dmc.bytesRemaining;
+        status.pulse1 = !!state->pulse1.lengthCounter;
+        status.pulse2 = !!state->pulse2.lengthCounter;
+        status.triangle = !!state->triangle.lengthCounter;
+        status.noise = !!state->noise.lengthCounter;
+        status.dmc = !!state->dmc.bytesRemaining;
         // TODO: Open bus behavior
         //status.unused = ((APUStatusReg)cpuOpenBus).unused;
 
