@@ -1876,7 +1876,7 @@ static inline void OpcodeTrace(char* opcode, uint8_t size, CpuReg* reg, MMap* mm
            reg->P.Z ? 'Z' : 'z', reg->P.C ? 'C' : 'c');
 
 
-    printf("cycles: %lu\n", CONTAINER_OF(reg, LuCNesCPU, reg)->cycles);
+    printf("cycles: %"PRIu64"\n", CONTAINER_OF(reg, LuCNesCPU, reg)->cycles);
     _cpu->ioInsnCycles = savedOpCycles;
 }
 static inline void OpcodeCntPrint(void)

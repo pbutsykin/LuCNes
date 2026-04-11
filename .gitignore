@@ -8,6 +8,5 @@
 *.nes
 *.o
 *.a
-lucnes
-lucnes.dbg
-lucnes_test
+lucnes*
+

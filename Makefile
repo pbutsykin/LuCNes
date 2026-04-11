@@ -1,6 +1,6 @@
 # Makefile
 
-CC = gcc
+CC ?= gcc
 BUILD ?= release
 LUCNES_BIN = lucnes
 LUCNES_TEST_BIN = lucnes_test
@@ -8,7 +8,9 @@ VIDEO_BACKEND ?= sdl2# sdl2, vt, empty
 AUDIO_BACKEND ?= sdl2# sdl2, pipe, empty
 INPUT_BACKEND ?= sdl2# sdl2, empty
 AUDIO_RL ?= 0
-NPROC ?= $(shell nproc --all || echo 1)
+NPROC ?= $(shell getconf _NPROCESSORS_ONLN)
+UNAME_M := $(shell uname -m)
+UNAME_S := $(shell uname -s)
 
 # Backend compatibility checks
 ifeq ($(AUDIO_BACKEND),sdl2)
@@ -18,8 +20,15 @@ VIDEO_BACKEND=$(VIDEO_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND))
 endif
 endif
 
-CFLAGS_COMMON = --std=c99 -mno-80387 -mno-sse -Wall -Wextra -Werror
+CFLAGS_COMMON = --std=c99 -Wall -Wextra -Werror
+
+ifneq (,$(filter x86_64 i386,$(UNAME_M)))
+CFLAGS_COMMON += -mno-80387 -mno-sse
+endif
+ifeq ($(UNAME_S),Linux)
 SANITIZERS = -fsanitize=address,undefined -fno-sanitize=alignment -fno-sanitize-recover=all
+endif
+
 ifeq ($(BUILD),debug)
 	CFLAGS = -g -Og $(CFLAGS_COMMON) -DLOG_LEVEL=3 $(SANITIZERS)
 else ifeq ($(BUILD),release0)
@@ -149,13 +158,14 @@ $(eval $(call mktest, submapper/7_test_2, --max_cycles 0x11b099))
 $(eval $(call mktest, joy/count_errors_fast, --max_cycles 0x16e445))
 
 clean:
-	rm -f $(LUCNES_BIN).* $(LUCNES_BIN) $(LUCNES_TEST_BIN) $(LUCNES_TEST_BIN).*
+	rm -rf $(LUCNES_BIN) $(LUCNES_BIN).* $(LUCNES_TEST_BIN) $(LUCNES_TEST_BIN).*
 ifeq ($(VIDEO_BACKEND),vt)
 	$(MAKE) -C video/vtrenderlib clean
 endif
 
 .PHONY: test $(ALL_TESTS)
 test: $(LUCNES_TEST_BIN)
+	@echo "Running tests with $(NPROC) CPUs"
 	@$(MAKE) --no-print-directory -j$(NPROC) -Otarget $(ALL_TESTS)
 
 $(LUCNES_TEST_BIN):
@@ -166,11 +176,14 @@ ifeq ($(VIDEO_BACKEND),vt)
 	$(MAKE) -C video/vtrenderlib CC="$(CC)" BUILD=$(BUILD) SANITIZERS="$(SANITIZERS)"
 endif
 	$(CC) $(CFLAGS) $(INCLUDE) $(SOURCES_MAIN) $(LIBS) -o $(LUCNES_BIN)
-ifeq ($(BUILD),release)
+ifeq ($(BUILD),release0)
+ifeq ($(UNAME_S),Darwin)
+	dsymutil $(LUCNES_BIN)
+	strip -x $(LUCNES_BIN)
+else ifeq ($(UNAME_S),Linux)
 	objcopy --only-keep-debug $(LUCNES_BIN) $(LUCNES_BIN).dbg
 	strip -s $(LUCNES_BIN)
 	objcopy --add-gnu-debuglink=$(LUCNES_BIN).dbg $(LUCNES_BIN)
 endif
-ifeq ($(BUILD),release0)
-	strip -s $(LUCNES_BIN)
 endif
+

@@ -407,7 +407,7 @@ int32_t CpuMainLoop(LuCNesCPU* cpu)
             CpuSyncDevices(cpu, 7);
         }
 
-        LogPrintAssert(!cpu->ioInsnCycles, "cpu->cycles: %ld, opCycles: %d\n", cpu->cycles, cpu->ioInsnCycles);
+        LogPrintAssert(!cpu->ioInsnCycles, "cpu->cycles: %"PRIu64", opCycles: %d\n", cpu->cycles, cpu->ioInsnCycles);
 
         currOpcode = CpuMemRead8(mmap, reg->PC++);
         opCycles = CpuOpcodeExecute(currOpcode, reg, mmap);

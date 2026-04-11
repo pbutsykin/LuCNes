@@ -12,10 +12,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-
-#ifdef __linux__
-#include <stdint.h>
-#endif
+#include <inttypes.h>
 
 #ifndef O_BINARY
 #define O_BINARY 0

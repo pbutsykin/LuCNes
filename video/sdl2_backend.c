@@ -64,8 +64,7 @@ VideoBackend* VideoInit(void)
             LogPrintErr("SDL_Init failed: %s\n", SDL_GetError());
             goto fail1;
         }
-        LogPrintWrn("X11 isn't available, using %s . Sync rendering may cause audio glitches.\n",
-                     SDL_GetCurrentVideoDriver());
+        LogPrintWrn("X11 isn't available, using %s.\n", SDL_GetCurrentVideoDriver());
     }
     atexit(SDL_Quit);
 
@@ -75,6 +74,7 @@ VideoBackend* VideoInit(void)
         LogPrintErr("Failed SDL_CreateWindow: %s\n", SDL_GetError());
         goto fail1;
     }
+    SDL_RaiseWindow(video->wind);
 
     video->rend = SDL_CreateRenderer(video->wind, -1, SDL_RENDERER_ACCELERATED);
     if (!video->rend) {
