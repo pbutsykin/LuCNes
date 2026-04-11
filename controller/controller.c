@@ -8,6 +8,13 @@
 #include <cpu/interface.h>
 #include <input/interface.h>
 
+enum {
+    JOY_UP    = 1 << 4,
+    JOY_DOWN  = 1 << 5,
+    JOY_LEFT  = 1 << 6,
+    JOY_RIGHT = 1 << 7,
+};
+
 typedef union _PortRead {
     uint8_t val;
     struct {
@@ -47,6 +54,14 @@ typedef struct _CNesController {
     void* input;
 } LuCNesController;
 
+/* Real NES d-pad prevents opposite directions from being pressed simultaneously. */
+static inline uint8_t ClearDpadConflicts(uint8_t buttons)
+{
+    uint8_t mask = (buttons >> 1) & buttons & (JOY_UP | JOY_LEFT);
+
+    return buttons ^ (mask | (mask << 1));
+}
+
 void ControllerRegWrite(void* controller, __maybe_unused MMap* mmap,
                         __maybe_unused uint8_t* addr, uint8_t val)
 {
@@ -57,9 +72,12 @@ void ControllerRegWrite(void* controller, __maybe_unused MMap* mmap,
     LogPrintDbg("write value: %x\n", val);
 
     if (!((PortWrite)val).strobe && ctl->signal.strobe) {
+        uint8_t val1 = InputRead(ctl->input, INPUT_PORT_JOY1);
+        uint8_t val2 = InputRead(ctl->input, INPUT_PORT_JOY2);
+
+        ctl->shift1.val = ClearDpadConflicts(val1);
+        ctl->shift2.val = ClearDpadConflicts(val2);
         ctl->shift1.cnt = ctl->shift2.cnt = 0;
-        ctl->shift1.val = InputRead(ctl->input, INPUT_PORT_JOY1);
-        ctl->shift2.val = InputRead(ctl->input, INPUT_PORT_JOY2);
     }
     ctl->signal.val = val;
 }
