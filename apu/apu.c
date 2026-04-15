@@ -212,6 +212,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             RegTraceW("pulse1.sweep", apu->cycles2x, val, reg->pulse1.r1);
             reg->pulse1.r1 = val;
             state->pulse1.sweep.reload = true;
+            ApuSweepCalcTarget(&state->pulse1, &reg->pulse1, true);
             break;
         case APU_REG_PULSE1_R2:
             RegTraceW("pulse1.r2", apu->cycles2x, val, reg->pulse1.r2);
@@ -246,6 +247,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             RegTraceW("pulse2.sweep", apu->cycles2x, val, reg->pulse2.r1);
             reg->pulse2.r1 = val;
             state->pulse2.sweep.reload = true;
+            ApuSweepCalcTarget(&state->pulse2, &reg->pulse2, false);
             break;
         case APU_REG_PULSE2_R2:
             RegTraceW("pulse2.r2", apu->cycles2x, val, reg->pulse2.r2);
@@ -603,10 +605,10 @@ static void ApuEnvelopeTick(APUEnvelope* env, uint8_t volume, uint8_t loopFlag)
 
 static void ApuSweepTick(APUStatePulse* pulse, APUChannelPulse* reg, bool isPulse1)
 {
-    ApuSweepCalcTarget(pulse, reg, isPulse1);
-
-    if (!pulse->sweep.divider && reg->sweep.enabled && reg->sweep.shift && !pulse->sweep.mute)
+    if (!pulse->sweep.divider && reg->sweep.enabled && reg->sweep.shift && !pulse->sweep.mute) {
         pulse->timer.period = pulse->sweep.targetPeriod;
+        ApuSweepCalcTarget(pulse, reg, isPulse1);
+    }
 
     if (!pulse->sweep.divider || pulse->sweep.reload) {
         pulse->sweep.divider = reg->sweep.period;
