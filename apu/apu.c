@@ -165,6 +165,18 @@ static uint8_t ApuNoiseOutput(APUStateNoise* noise, APUChannelNoise* reg)
     return (reg->cvFlag ? reg->volume : noise->envelope.decay) * TND_MIX_IDX_NOISE;
 }
 
+static inline void ApuUpdateOutput(LuCNesAPU* apu)
+{
+    APUReg* reg = apu->reg;
+
+    apu->state.pulse1.output = ApuPulseOutput(&apu->state.pulse1, &reg->pulse1);
+    apu->state.pulse2.output = ApuPulseOutput(&apu->state.pulse2, &reg->pulse2);
+    apu->state.triangle.output = ApuTriangleOutput(&apu->state.triangle);
+    apu->state.noise.output = ApuNoiseOutput(&apu->state.noise, &reg->noise);
+    apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
+    apu->outputMix = ApuGetMixedSample(apu);
+}
+
 /* Noise period lookup table (NTSC) */
 static const uint16_t noisePeriodTable[16] = {
     2, 4, 8,  16, 32, 48, 64,  80,  101, 127, 190, 254, 381, 508,  1017, 2034
@@ -389,12 +401,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             LogPrintAssert(0, "Invalid APU register: %x\n", regOffs);
             break;
     }
-    state->pulse1.output = ApuPulseOutput(&state->pulse1, &reg->pulse1);
-    state->pulse2.output = ApuPulseOutput(&state->pulse2, &reg->pulse2);
-    state->triangle.output = ApuTriangleOutput(&state->triangle);
-    state->noise.output = ApuNoiseOutput(&state->noise, &reg->noise);
-    apu->tndIndexBase = state->noise.output + state->dmc.outputLevel;
-    apu->outputMix = ApuGetMixedSample(apu);
+    ApuUpdateOutput(apu);
 }
 
 bool ApuCheckIRQ(LuCNesAPU* apu)
@@ -635,9 +642,6 @@ static void ApuQuarterFrameTick(APUReg* reg, APUState* state)
     ApuEnvelopeTick(&state->pulse2.envelope, reg->pulse2.volume, reg->pulse2.lcFlag);
     ApuEnvelopeTick(&state->noise.envelope, reg->noise.volume, reg->noise.lcFlag);
     ApuLinearCounterTick(&state->triangle, &reg->triangle);
-    state->pulse1.output = ApuPulseOutput(&state->pulse1, &reg->pulse1);
-    state->pulse2.output = ApuPulseOutput(&state->pulse2, &reg->pulse2);
-    state->noise.output = ApuNoiseOutput(&state->noise, &reg->noise);
 }
 
 static void ApuHalfFrameTick(APUReg* reg, APUState* state)
@@ -649,9 +653,6 @@ static void ApuHalfFrameTick(APUReg* reg, APUState* state)
 
     ApuSweepTick(&state->pulse1, &reg->pulse1, true);
     ApuSweepTick(&state->pulse2, &reg->pulse2, false);
-    state->pulse1.output = ApuPulseOutput(&state->pulse1, &reg->pulse1);
-    state->pulse2.output = ApuPulseOutput(&state->pulse2, &reg->pulse2);
-    state->noise.output = ApuNoiseOutput(&state->noise, &reg->noise);
 }
 
 static inline void ApuFlushFrameSignals(LuCNesAPU* apu)
@@ -766,8 +767,7 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
     }
     if (unlikely(frame->pendingQuarter || frame->pendingHalf)) {
         ApuFlushFrameSignals(apu);
-        apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
-        apu->outputMix = ApuGetMixedSample(apu);
+        ApuUpdateOutput(apu);
     }
     if (unlikely(frame->resetDelay && !--frame->resetDelay)) {
         frame->countdown = 0;
@@ -776,8 +776,7 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
         if (reg->frameCounter.mode) {
             ApuQuarterFrameTick(reg, &apu->state);
             ApuHalfFrameTick(reg, &apu->state);
-            apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
-            apu->outputMix = ApuGetMixedSample(apu);
+            ApuUpdateOutput(apu);
         }
     }
 }
