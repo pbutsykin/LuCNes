@@ -373,8 +373,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
 
 bool ApuCheckIRQ(LuCNesAPU* apu)
 {
-    /* Check both frame counter IRQ and DMC IRQ */
-    return apu->reg->status.frameIrq || apu->reg->status.dmcIrq;
+    return apu->irq;
 }
 
 void* ApuRegRead(void* ctx, MMap* mmap, uint8_t* addr)
@@ -756,6 +755,7 @@ void ApuTicksExecute(LuCNesAPU* apu, const uint8_t cpuCycles)
     APUState* state = &apu->state;
 
     for (int i = 0; i < cpuCycles; i++) {
+        apu->irq = reg->status.frameIrq || reg->status.dmcIrq;
 
         ApuProcessPendingFrameSignals(apu);
 

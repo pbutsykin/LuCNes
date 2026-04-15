@@ -242,6 +242,7 @@ typedef struct _CNesAPU {
     } state;
 
     uint64_t cycles2x;
+    bool irq;
 
     uint32_t sampleAccum;
     uint32_t sampleCount;

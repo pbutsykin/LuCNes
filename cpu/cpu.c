@@ -389,6 +389,7 @@ int32_t CpuMainLoop(LuCNesCPU* cpu)
     CpuReg* reg = &cpu->reg;
     MMap* mmap = &cpu->mmap;
     LuCNesPPU* ppu = cpu->con->ppu;
+    LuCNesAPU* apu = cpu->con->apu;
 
     do {
         uint8_t currOpcode;
@@ -402,7 +403,7 @@ int32_t CpuMainLoop(LuCNesCPU* cpu)
             CpuSyncDevices(cpu, 7);
         }
 
-        if (unlikely(!cpu->irqDisabled && ApuCheckIRQ(cpu->con->apu))) {
+        if (unlikely(!cpu->irqDisabled && ApuCheckIRQ(apu))) {
             CpuExecuteIRQ(reg, mmap);
             CpuSyncDevices(cpu, 7);
         }
