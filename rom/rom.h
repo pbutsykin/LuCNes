@@ -26,7 +26,7 @@ typedef struct _RomDesc {
     MFile* rfile;
 } RomDesc;
 
-RomDesc* LoadRomFile(char* fname);
+RomDesc* LoadRomFile(const char* fname);
 void UnloadRomFile(RomDesc* rdesc);
 
 #endif /* __CNES_ROM_ */

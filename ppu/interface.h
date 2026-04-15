@@ -8,8 +8,11 @@
 #include <ppu/mmap.h>
 
 typedef struct _MMap MMap;
+typedef struct _PPUConfig {
+    bool noSpriteLimit;
+} PPUConfig;
 
-LuCNesPPU* PpuInit(LuCNesCPU* cpu, RomDesc* rdesc, MapperObj* mapper, void* connector);
+LuCNesPPU* PpuInit(LuCNesCPU* cpu, RomDesc* rdesc, MapperObj* mapper, void* con, const PPUConfig* cfg);
 void PpuFree(LuCNesPPU* ppu);
 
 PPUMMap* PpuMMap(LuCNesPPU* ppu);

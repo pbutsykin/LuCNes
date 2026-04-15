@@ -127,9 +127,11 @@ typedef union _VRAMAddrReg {
 } VRAMAddrReg;
 
 typedef struct _SpriteObj SpriteObj;
+typedef struct _PPUConfig PPUConfig;
 
 typedef struct _CNesPPU {
     PPUReg* reg;
+    const PPUConfig* cfg;
     PPUMMap mmap;
     PPUMTab mtab[PPU_MAX_PAGES];
     union {

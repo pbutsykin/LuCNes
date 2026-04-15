@@ -69,7 +69,7 @@ void UnloadRomFile(RomDesc* rdesc)
     MemFree(rdesc);
 }
 
-RomDesc* LoadRomFile(char* fname)
+RomDesc* LoadRomFile(const char* fname)
 {
     assert(fname != NULL);
 

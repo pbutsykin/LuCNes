@@ -5,6 +5,7 @@
 
 #include "config.h"
 #include <utils/utils.h>
+#include <getopt.h>
 
 #include "connector.h"
 #include <rom/rom.h>
@@ -14,19 +15,57 @@
 #include <mapper/interface.h>
 #include <controller/interface.h>
 
-int main(int argc, char const *argv[])
+typedef struct _LuCNeConfig {
+    const char* romPath;
+    PPUConfig ppu;
+} LuCNeConfig;
+
+static void Usage(const char* prog)
+{
+    LogPrintErr("Usage: %s [--no-sprite-limit] <rom file>\n", prog);
+}
+
+static bool ParseArgs(int argc, char* const argv[], LuCNeConfig* cfg)
+{
+    static const struct option options[] = {
+        {"no-sprite-limit", no_argument, NULL, 's'},
+        {NULL, 0, NULL, 0}
+    };
+    int opt;
+
+    while ((opt = getopt_long(argc, argv, "s", options, NULL)) != -1) {
+        switch (opt) {
+            case 's':
+                cfg->ppu.noSpriteLimit = true;
+                break;
+            default:
+                return false;
+        }
+    }
+
+    if (optind + 1 != argc)
+        return false;
+
+    cfg->romPath = argv[optind];
+    return true;
+}
+
+int main(int argc, char* const argv[])
 {
     CNesConnector con = {
         .pins = 0,
     };
+    LuCNeConfig cfg = {
+        .ppu.noSpriteLimit = false,
+    };
     int ret = -1;
 
-    if (argc != 2) {
-        LogPrintErr("Usage: %s <rom file>\n", argv[0]);
+    if (!ParseArgs(argc, argv, &cfg)) {
+        Usage(argv[0]);
         return ret;
     }
 
-    con.rdesc = LoadRomFile((char*)argv[1]);
+    con.rdesc = LoadRomFile(cfg.romPath);
     if (!con.rdesc) {
         LogPrintErr("Rom open failed\n");
         return ret;
@@ -42,7 +81,7 @@ int main(int argc, char const *argv[])
     if (!con.cpu)
         goto fail1;
 
-    con.ppu = PpuInit(con.cpu, con.rdesc, con.mapper, &con);
+    con.ppu = PpuInit(con.cpu, con.rdesc, con.mapper, &con, &cfg.ppu);
     if (!con.ppu)
         goto fail2;
 

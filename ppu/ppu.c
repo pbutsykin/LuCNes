@@ -11,6 +11,7 @@
 #include <mapper/interface.h>
 #include <video/interface.h>
 
+#include "interface.h"
 #include "ppu.h"
 #include "render.h"
 
@@ -560,11 +561,12 @@ static void PpuMMapInit(RomDesc* const rdesc, MapperObj* const mapper,
     memcpy(mtab, &mtabInit, sizeof(*mtab));
 }
 
-LuCNesPPU* PpuInit(LuCNesCPU* cpu, RomDesc* rdesc, MapperObj* mapper, void* connector)
+LuCNesPPU* PpuInit(LuCNesCPU* cpu, RomDesc* rdesc, MapperObj* mapper, void* con, const PPUConfig* cfg)
 {
     LuCNesPPU* ppu = MemAlloc(sizeof(*ppu));
     *ppu = (LuCNesPPU) {
         .reg = PpuRegInit(CpuMMap(cpu)->ppuReg),
+        .cfg = cfg,
         .oam = MemAlloc(PPU_OAM_SIZE),
         /* https://wiki.nesdev.com/w/index.php/PPU_power_up_state
          * It is conjectured that the first VBL flag setting will be
@@ -581,7 +583,7 @@ LuCNesPPU* PpuInit(LuCNesCPU* cpu, RomDesc* rdesc, MapperObj* mapper, void* conn
     }
 
     PpuMMapInit(rdesc, mapper, &ppu->mmap, &ppu->mtab);
-    ppu->con = connector;
+    ppu->con = con;
 
     return ppu;
 

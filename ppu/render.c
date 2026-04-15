@@ -7,6 +7,7 @@
 #include <utils/utils.h>
 #include <video/interface.h>
 
+#include "interface.h"
 #include "ppu.h"
 
 #define PPU_TILE_COLUMN_NUM (1 << PPU_TILE_COLUMN_BIT)
@@ -389,10 +390,11 @@ static void PreRenderSpriteLine(LuCNesPPU* ppu, const uint8_t y)
         /* XXX: Sprite overflow has hardware bug. Is it worth emulating this bug as well?
          * https://wiki.nesdev.org/w/index.php?title=PPU_sprite_evaluation#Sprite_overflow_bug
          */
-        if (++spritesNum > PPU_SPRITES_PER_LINE) {
+        if (++spritesNum == PPU_SPRITES_PER_LINE + 1) {
             reg->status |= PPU_SPRITE_OVERFLOW_MASK;
             LogPrintDbg("Sprite Overflow: y: %u, x: %u\n", sprite->y, sprite->x);
-            break;
+            if (!ppu->cfg->noSpriteLimit)
+                break;
         }
         tile_y = y - sprite->y;
         if (unlikely(sprite->flipV))

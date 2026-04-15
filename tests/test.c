@@ -24,6 +24,7 @@ struct arguments {
     uint16_t cpu_addr;
     uint16_t start_cycle;
     uint32_t max_cycles;
+    PPUConfig ppu;
 };
 
 static void usage(const char *prog)
@@ -115,7 +116,7 @@ int main(int argc, char **argv)
     connector.cpu = CpuInit(connector.rdesc, connector.mapper, &connector, &test);
     assert(connector.cpu != NULL);
 
-    connector.ppu = PpuInit(connector.cpu, connector.rdesc, connector.mapper, &connector);
+    connector.ppu = PpuInit(connector.cpu, connector.rdesc, connector.mapper, &connector, &args.ppu);
     assert(connector.ppu != NULL);
 
     connector.apu = ApuInit(connector.cpu, &connector);
