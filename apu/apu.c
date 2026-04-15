@@ -826,6 +826,9 @@ LuCNesAPU* ApuInit(LuCNesCPU* cpu, void* connector)
     apu->state.noise.timer.countdown = noisePeriodTable[0];
     apu->state.noise.output = ApuNoiseOutput(&apu->state.noise, &apu->reg->noise);
 
+    /* Skip 5 apu ticks (10 cpu cycles) already elapsed during cpu reset sequence. */
+    apu->state.frame.countdown = 5;
+
     /* DMC power-up state: buffer empty, ready for new byte, silence
      * Timer starts at rate 0 period (dmcRateTable[0]).
      */
