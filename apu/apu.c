@@ -98,10 +98,10 @@ static uint8_t ApuPulseOutput(APUStatePulse* pulse, APUChannelPulse* reg)
 {
     /* Pulse duty sequences */
     static const uint8_t dutyTable[4][8] = {
-        {0, 1, 0, 0, 0, 0, 0, 0}, /* 12.5% */
-        {0, 1, 1, 0, 0, 0, 0, 0}, /* 25% */
-        {0, 1, 1, 1, 1, 0, 0, 0}, /* 50% */
-        {1, 0, 0, 1, 1, 1, 1, 1}  /* 75% (inverted 25%) */
+        {0, 0, 0, 0, 0, 0, 0, 1}, /* 12.5% */
+        {0, 0, 0, 0, 0, 0, 1, 1}, /* 25% */
+        {0, 0, 0, 0, 1, 1, 1, 1}, /* 50% */
+        {1, 1, 1, 1, 1, 1, 0, 0}  /* 75% (inverted 25%) */
     };
 
     if (pulse->sweep.mute)
