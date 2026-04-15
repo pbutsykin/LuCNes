@@ -175,6 +175,8 @@ static const uint16_t dmcRateTable[16] = {
     214, 190, 170, 160, 143, 127, 113, 107, 95, 80, 71, 64, 53, 42, 36, 27
 };
 
+static inline void ApuFlushFrameSignals(LuCNesAPU* apu);
+
 void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
 {
     /* Length counter lookup table */
@@ -191,6 +193,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
     switch (regOffs) {
         case APU_REG_PULSE1_R0:
             RegTraceW("pulse1.r0", apu->cycles2x, val, reg->pulse1.r0);
+            ApuFlushFrameSignals(apu);
             reg->pulse1.r0 = val;
             state->pulse1.envelope.startFlag = true;
             break;
@@ -210,8 +213,13 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             reg->pulse1.r3 = val;
             state->pulse1.timer.period = ApuPulseTimerRead(&reg->pulse1);
             state->pulse1.dutyIdx = 0;
-            if (reg->status.pulse1)
-                state->pulse1.lengthCounter = lengthTable[reg->pulse1.lenghCount];
+            if (reg->status.pulse1) {
+                const uint8_t prev = state->pulse1.lengthCounter;
+
+                ApuFlushFrameSignals(apu);
+                if (prev == state->pulse1.lengthCounter)
+                    state->pulse1.lengthCounter = lengthTable[reg->pulse1.lenghCount];
+            }
             state->pulse1.envelope.startFlag = true;
             ApuSweepCalcTarget(&state->pulse1, &reg->pulse1, true);
             LogPrintDbg("pulse1: period=%x, length=%x\n", state->pulse1.timer.period,
@@ -220,6 +228,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
 
         case APU_REG_PULSE2_R0:
             RegTraceW("pulse2.r0", apu->cycles2x, val, reg->pulse2.r0);
+            ApuFlushFrameSignals(apu);
             reg->pulse2.r0 = val;
             state->pulse2.envelope.startFlag = true;
             break;
@@ -239,8 +248,13 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             reg->pulse2.r3 = val;
             state->pulse2.timer.period = ApuPulseTimerRead(&reg->pulse2);
             state->pulse2.dutyIdx = 0;
-            if (reg->status.pulse2)
-                state->pulse2.lengthCounter = lengthTable[reg->pulse2.lenghCount];
+            if (reg->status.pulse2) {
+                const uint8_t prev = state->pulse2.lengthCounter;
+
+                ApuFlushFrameSignals(apu);
+                if (prev == state->pulse2.lengthCounter)
+                    state->pulse2.lengthCounter = lengthTable[reg->pulse2.lenghCount];
+            }
             state->pulse2.envelope.startFlag = true;
             ApuSweepCalcTarget(&state->pulse2, &reg->pulse2, false);
             LogPrintDbg("pulse2: period=%x, length=%x\n", state->pulse2.timer.period,
@@ -249,6 +263,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
 
         case APU_REG_TRI_R0:
             RegTraceW("tri.r0", apu->cycles2x, val, reg->triangle.r0);
+            ApuFlushFrameSignals(apu);
             reg->triangle.r0 = val;
             break;
         case APU_REG_TRI_R1:
@@ -264,8 +279,13 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             RegTraceW("tri.r3", apu->cycles2x, val, reg->triangle.r3);
             reg->triangle.r3 = val;
             state->triangle.timer.period = ApuTriangleTimerRead(&reg->triangle);
-            if (reg->status.triangle)
-                state->triangle.lengthCounter = lengthTable[reg->triangle.lenghCount];
+            if (reg->status.triangle) {
+                const uint8_t prev = state->triangle.lengthCounter;
+
+                ApuFlushFrameSignals(apu);
+                if (prev == state->triangle.lengthCounter)
+                    state->triangle.lengthCounter = lengthTable[reg->triangle.lenghCount];
+            }
             state->triangle.linearReload = true;
             LogPrintDbg("triangle: period=%x, length=%x\n", state->triangle.timer.period,
                         state->triangle.lengthCounter);
@@ -273,6 +293,7 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
 
         case APU_REG_NOISE_R0:
             RegTraceW("noise.r0", apu->cycles2x, val, reg->noise.r0);
+            ApuFlushFrameSignals(apu);
             reg->noise.r0 = val;
             state->noise.envelope.startFlag = true;
             break;
@@ -288,8 +309,13 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
         case APU_REG_NOISE_R3:
             RegTraceW("noise.length", apu->cycles2x, val, reg->noise.r3);
             reg->noise.r3 = val;
-            if (reg->status.noise)
-                state->noise.lengthCounter = lengthTable[reg->noise.lenghCount];
+            if (reg->status.noise) {
+                const uint8_t prev = state->noise.lengthCounter;
+
+                ApuFlushFrameSignals(apu);
+                if (prev == state->noise.lengthCounter)
+                    state->noise.lengthCounter = lengthTable[reg->noise.lenghCount];
+            }
             state->noise.envelope.startFlag = true;
             LogPrintDbg("noise: period=%x, length=%x\n", state->noise.timer.period,
                         state->noise.lengthCounter);
@@ -628,6 +654,20 @@ static void ApuHalfFrameTick(APUReg* reg, APUState* state)
     state->noise.output = ApuNoiseOutput(&state->noise, &reg->noise);
 }
 
+static inline void ApuFlushFrameSignals(LuCNesAPU* apu)
+{
+    APUFrameCounter* frame = &apu->state.frame;
+
+    if (unlikely(frame->pendingQuarter)) {
+        frame->pendingQuarter = false;
+        ApuQuarterFrameTick(apu->reg, &apu->state);
+    }
+    if (unlikely(frame->pendingHalf)) {
+        frame->pendingHalf = false;
+        ApuHalfFrameTick(apu->reg, &apu->state);
+    }
+}
+
 static void ApuFrameCounterTick(LuCNesAPU* apu)
 {
     static const uint16_t frameSteps[] = {3728, 7456, 11185, 14914, 18640};
@@ -724,15 +764,8 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
         if (!reg->frameCounter.irqDisable)
             reg->status.frameIrq = true;
     }
-    if (unlikely(frame->pendingQuarter)) {
-        frame->pendingQuarter = false;
-        ApuQuarterFrameTick(reg, &apu->state);
-        apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
-        apu->outputMix = ApuGetMixedSample(apu);
-    }
-    if (unlikely(frame->pendingHalf)) {
-        frame->pendingHalf = false;
-        ApuHalfFrameTick(reg, &apu->state);
+    if (unlikely(frame->pendingQuarter || frame->pendingHalf)) {
+        ApuFlushFrameSignals(apu);
         apu->tndIndexBase = apu->state.noise.output + apu->state.dmc.outputLevel;
         apu->outputMix = ApuGetMixedSample(apu);
     }
