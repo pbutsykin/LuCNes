@@ -207,7 +207,6 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             RegTraceW("pulse1.r0", apu->cycles2x, val, reg->pulse1.r0);
             ApuFlushFrameSignals(apu);
             reg->pulse1.r0 = val;
-            state->pulse1.envelope.startFlag = true;
             break;
         case APU_REG_PULSE1_R1:
             RegTraceW("pulse1.sweep", apu->cycles2x, val, reg->pulse1.r1);
@@ -242,7 +241,6 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             RegTraceW("pulse2.r0", apu->cycles2x, val, reg->pulse2.r0);
             ApuFlushFrameSignals(apu);
             reg->pulse2.r0 = val;
-            state->pulse2.envelope.startFlag = true;
             break;
         case APU_REG_PULSE2_R1:
             RegTraceW("pulse2.sweep", apu->cycles2x, val, reg->pulse2.r1);
@@ -307,7 +305,6 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             RegTraceW("noise.r0", apu->cycles2x, val, reg->noise.r0);
             ApuFlushFrameSignals(apu);
             reg->noise.r0 = val;
-            state->noise.envelope.startFlag = true;
             break;
         case APU_REG_NOISE_R1:
             RegTraceW("noise.unused", apu->cycles2x, val, reg->noise.r1);
