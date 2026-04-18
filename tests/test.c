@@ -70,12 +70,12 @@ static void PrintTestMessage(MMap* mmap)
 
     uint16_t addr = 0x6000;
     uint8_t status = CpuMemRead8(mmap, addr++);
-    uint8_t signature[3] = {
-        CpuMemRead8(mmap, addr++),
-        CpuMemRead8(mmap, addr++),
-        CpuMemRead8(mmap, addr++),
-    };
+    uint8_t signature[3];
     uint8_t c;
+
+    signature[0] = CpuMemRead8(mmap, addr++);
+    signature[1] = CpuMemRead8(mmap, addr++);
+    signature[2] = CpuMemRead8(mmap, addr++);
 
     if (memcmp(signature, BLARGG_SIGNATURE, sizeof(signature))) {
         LogPrintDbg("Invalid signature: %X%X%X\n",  signature[0],  signature[1], signature[2]);

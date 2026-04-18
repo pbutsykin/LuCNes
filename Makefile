@@ -20,7 +20,7 @@ VIDEO_BACKEND=$(VIDEO_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND))
 endif
 endif
 
-CFLAGS_COMMON = --std=c99 -Wall -Wextra -Werror
+CFLAGS_COMMON = --std=c11 -Wall -Wextra -Werror
 
 ifneq (,$(filter x86_64 i386,$(UNAME_M)))
 CFLAGS_COMMON += -mno-80387 -mno-sse
@@ -161,14 +161,17 @@ $(eval $(call mktest, submapper/7_test_2, --max_cycles 0x11b099))
 
 $(eval $(call mktest, joy/count_errors_fast, --max_cycles 0x16e445))
 
-clean:
-	rm -rf $(LUCNES_BIN) $(LUCNES_BIN).* $(LUCNES_TEST_BIN) $(LUCNES_TEST_BIN).*
+clean: clean-test
+	@rm -rf $(LUCNES_BIN) $(LUCNES_BIN).*
 ifeq ($(VIDEO_BACKEND),vt)
 	$(MAKE) -C video/vtrenderlib clean
 endif
 
+clean-test:
+	@rm -rf $(LUCNES_TEST_BIN) $(LUCNES_TEST_BIN).*
+
 .PHONY: test $(ALL_TESTS)
-test: $(LUCNES_TEST_BIN)
+test: clean-test $(LUCNES_TEST_BIN)
 	@echo "Running tests with $(NPROC) CPUs"
 	@$(MAKE) --no-print-directory -j$(NPROC) -Otarget $(ALL_TESTS)
 

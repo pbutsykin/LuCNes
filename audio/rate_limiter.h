@@ -13,7 +13,7 @@
 #ifdef AUDIO_RL
 void AudioRateLimiterTick(uint16_t samples);
 #else
-static inline void AudioRateLimiterTick(uint16_t) { }
+static inline void AudioRateLimiterTick(uint16_t samples) { (void)samples; }
 #endif
 
 #endif /* __CNES_AUDIO_RATE_LIMITER_H_ */

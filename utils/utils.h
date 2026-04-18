@@ -18,6 +18,10 @@
 #define O_BINARY 0
 #endif
 
+#ifndef __has_builtin
+#define __has_builtin(x) 0
+#endif
+
 #ifndef likely
 #if __GNUC__ < 3
 #define __builtin_expect(x, n) (x)
@@ -42,11 +46,14 @@ typedef struct _region_t {
     uint8_t* data;
 } region_t;
 
-/* XXX: need move */
-#define OFFSET_OF(_type, _field) ((uintptr_t)&(((_type*)0)->_field))
+#if __has_builtin(__builtin_offsetof) || defined(__GNUC__)
+#define offsetof(_type, _field) __builtin_offsetof(_type, _field)
+#else
+#define offsetof(_type, _field) ((uintptr_t)&(((_type*)0)->_field))
+#endif
 
 #define CONTAINER_OF(_addr, _type, _field) \
-    ((_type*)((uint8_t*)_addr - (uint8_t*)OFFSET_OF(_type, _field)))
+    ((_type*)((uint8_t*)(_addr) - offsetof(_type, _field)))
 
 #define StaticAssert(_assert, _msg) _Static_assert(_assert, _msg)
 

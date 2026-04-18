@@ -92,11 +92,6 @@ inline static uint8_t GetPixelColorIdx(uint8_t high, uint8_t low, uint8_t shift)
     return (((high >> shift) & 1) << 1) | ((low >> shift) & 1);
 }
 
-inline static uint8_t GetTilePixel(const PPUTile* tile, const uint8_t row, const uint8_t shift)
-{
-    return GetPixelColorIdx(tile->high[row], tile->low[row], shift);
-}
-
 static inline uint8_t attrIdxFromNameTableIdx(const uint16_t ntIdx)
 {
 #define TILES_PER_ATTR_BLOCK_ROW 128
@@ -405,8 +400,7 @@ static void PreRenderSpriteLine(LuCNesPPU* ppu, const uint8_t y)
             uint8_t topTileIdx = sprite->tile.idx8x16 << 1;
 
             /* An 8x16 tile is just two 8x8 tiles. So here, within the 8x16 tile, we pick either
-             * the first or the second 8x8 tile and convert tile_y into 8 row form so we can reuse
-             * GetTilePixel().
+             * the first or the second 8x8 tile and convert tile_y into 8 row form.
              */
             tile = &ptTable[topTileIdx + (tile_y >> PPU_TILE_ROW_BIT)];
             tile_y &= TILE_ROW_MASK;
