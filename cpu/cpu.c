@@ -69,6 +69,7 @@ static void CpuMMapInit(const RomDesc* rdesc, MapperObj* mapper, MMap* mmap)
 #define CPU_RAM_END_ADDR 0x7FF
 
 enum {
+    MASK_RAM  = 0x7FF,
     MASK_SREG = 0xFF,
     MASK_PPU  = 0x7,
     MASK_SRAM = 0x1FFF,
@@ -132,7 +133,8 @@ static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_
 
     switch(addr) {
         case CPU_RAM:
-            mdev->addr = mmap->ram + addr;
+        case RAM_MIRROR:
+            mdev->addr = mmap->ram + (addr & MASK_RAM);
             break;
         case PPU_REG:
         case PPU_MIRROR:
