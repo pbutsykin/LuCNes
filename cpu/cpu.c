@@ -97,11 +97,6 @@ static inline void CpuDevMemWrite8(void* _ __maybe_unused, MMap* __ __maybe_unus
     *addr = val;
 }
 
-static inline void CpuDevMemWrite16(void* _ __maybe_unused, MMap* __ __maybe_unused, uint16_t* addr, uint16_t val)
-{
-    *addr = val;
-}
-
 static void CpuDevMapperReload8(void* ctx, MMap* mmap, uint8_t* __ __maybe_unused, uint8_t val)
 {
     CpuMappedDevMemory* mdev = ctx;
@@ -261,24 +256,6 @@ inline uint8_t CpuMemRead8(MMap* mmap, uint16_t addr)
     };
     CpuSlowResolveAddr(cpu, &mdev, addr, false);
     return *(uint8_t*)mdev.cpuRead(mdev.ctx, mmap, mdev.addr);
-}
-
-inline void CpuMemWrite16(MMap* mmap, uint16_t addr, uint16_t val)
-{
-    LuCNesCPU* cpu = CONTAINER_OF(mmap, LuCNesCPU, mmap);
-
-    cpu->ioInsnCycles += 2;
-
-    if (likely(addr <= CPU_RAM_END_ADDR)) {
-        *(uint16_t*)(mmap->ram + addr) = val;
-        return;
-    }
-
-    CpuMappedDevMemory mdev = {
-        .cpuWrite16 = CpuDevMemWrite16,
-    };
-    CpuSlowResolveAddr(cpu, &mdev, addr, true);
-    mdev.cpuWrite16(mdev.ctx, mmap, mdev.addr, val);
 }
 
 inline void CpuMemWrite8(MMap* mmap, uint16_t addr, uint8_t val)

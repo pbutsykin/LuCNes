@@ -70,8 +70,6 @@ typedef struct _CNesCPU {
 
 uint8_t CpuMemRead8(MMap* mmap, uint16_t addr);
 uint16_t CpuMemRead16(MMap* mmap, uint16_t addr);
-
-void CpuMemWrite16(MMap* mmap, uint16_t addr, uint16_t val);
 void CpuMemWrite8(MMap* mmap, uint16_t addr, uint8_t val);
 
 void CpuDebugDumpState(LuCNesCPU* cpu);

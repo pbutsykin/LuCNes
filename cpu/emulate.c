@@ -80,7 +80,9 @@ static inline uint8_t pop8(CpuReg* reg, MMap* mmap)
 
 static inline void push16(uint16_t val, CpuReg* reg, MMap* mmap)
 {
-    CpuMemWrite16(mmap, STACK_BASE_ADDR + reg->S - 1, val);
+    uint8_t* stack = mmap->ram + STACK_BASE_ADDR;
+
+    *(uint16_t*)(stack + reg->S - 1) = val;
     reg->S -= 2;
 }
 
