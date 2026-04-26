@@ -185,7 +185,7 @@ test: clean-test $(LUCNES_TEST_BIN)
 $(LUCNES_TEST_BIN):
 	$(CC) $(CFLAGS_TEST) $(INCLUDE_COMMON) $(SOURCES_TEST) -o $(LUCNES_TEST_BIN)
 
-lucnes: $(LUCNES_TEST_BIN)
+lucnes:
 ifeq ($(VIDEO_BACKEND),vt)
 	$(MAKE) -C video/vtrenderlib CC="$(CC)" BUILD=$(BUILD) SANITIZERS="$(SANITIZERS)"
 endif
