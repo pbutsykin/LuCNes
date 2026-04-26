@@ -46,10 +46,12 @@ typedef struct _region_t {
     uint8_t* data;
 } region_t;
 
+#ifndef offsetof
 #if __has_builtin(__builtin_offsetof) || defined(__GNUC__)
 #define offsetof(_type, _field) __builtin_offsetof(_type, _field)
 #else
 #define offsetof(_type, _field) ((uintptr_t)&(((_type*)0)->_field))
+#endif
 #endif
 
 #define CONTAINER_OF(_addr, _type, _field) \

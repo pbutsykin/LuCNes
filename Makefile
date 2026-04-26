@@ -6,7 +6,7 @@ LUCNES_BIN = lucnes
 LUCNES_TEST_BIN = lucnes_test
 VIDEO_BACKEND ?= sdl2# sdl2, vt, empty
 AUDIO_BACKEND ?= sdl2# sdl2, pipe, empty
-INPUT_BACKEND ?= sdl2# sdl2, empty
+INPUT_BACKEND ?= sdl2# sdl2, vt, empty
 AUDIO_RL ?= 0
 NPROC ?= $(shell getconf _NPROCESSORS_ONLN)
 UNAME_M := $(shell uname -m)
@@ -17,6 +17,13 @@ ifeq ($(AUDIO_BACKEND),sdl2)
 ifneq ($(VIDEO_BACKEND),sdl2)
 $(error SDL2 audio backend requires SDL2 video backend. \
 VIDEO_BACKEND=$(VIDEO_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND))
+endif
+endif
+
+ifeq ($(VIDEO_BACKEND),vt)
+ifneq ($(INPUT_BACKEND),vt)
+$(error VT video backend requires VT input backend. \
+VIDEO_BACKEND=$(VIDEO_BACKEND) INPUT_BACKEND=$(INPUT_BACKEND))
 endif
 endif
 
