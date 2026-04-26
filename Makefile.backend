@@ -1,0 +1,43 @@
+# Backend presets.
+
+BACKEND ?= sdl2
+
+ifeq ($(BACKEND),sdl2)
+  VIDEO_BACKEND ?= sdl2
+  AUDIO_BACKEND ?= sdl2
+  INPUT_BACKEND ?= sdl2
+  AUDIO_RL ?= 0
+else ifeq ($(BACKEND),vt)
+  VIDEO_BACKEND ?= vt
+  INPUT_BACKEND ?= vt
+  ifeq ($(UNAME_S),Linux)
+    AUDIO_BACKEND ?= pipe
+    AUDIO_RL ?= 0
+  else
+    AUDIO_BACKEND ?= empty
+    AUDIO_RL ?= 1
+  endif # UNAME_S Linux
+else ifeq ($(BACKEND),empty)
+  VIDEO_BACKEND ?= empty
+  AUDIO_BACKEND ?= empty
+  INPUT_BACKEND ?= empty
+  AUDIO_RL ?= 0
+else
+  $(error Unsupported BACKEND=$(BACKEND). Supported values: sdl2, vt, empty)
+endif
+
+# Backend compatibility checks.
+ifeq ($(AUDIO_BACKEND),sdl2)
+  ifneq ($(VIDEO_BACKEND),sdl2)
+    $(error SDL2 audio backend requires SDL2 video backend. \
+    VIDEO_BACKEND=$(VIDEO_BACKEND) AUDIO_BACKEND=$(AUDIO_BACKEND))
+  endif
+endif
+
+ifeq ($(INPUT_BACKEND),vt)
+  ifneq ($(VIDEO_BACKEND),vt)
+    $(error VT input backend requires VT video backend. \
+    VIDEO_BACKEND=$(VIDEO_BACKEND) INPUT_BACKEND=$(INPUT_BACKEND))
+  endif
+endif
+

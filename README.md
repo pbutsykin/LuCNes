@@ -11,7 +11,7 @@ The main goal, though, was to have a lightweight, simple emulator for personal u
 ## Terminal video backend (Braille)
 Build with:
 ```sh
-VIDEO_BACKEND=vt AUDIO_BACKEND=pipe make
+make BACKEND=vt
 ```
 This emulator can render NES video output directly in a terminal emulator. It uses unicode braille characters to pack multiple pixels into one cell. It can also be used over ssh or on linux VT, but output quality depends on unicode rendering and braille characters support.
 
