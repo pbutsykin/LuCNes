@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <spawn.h>
 
 #include "interface.h"
 
@@ -39,6 +40,7 @@ static inline void AudioPipeDebugCheck(AudioBackend* audio __maybe_unused, ssize
 
 static pid_t SpawnPlayer(int* outFd)
 {
+    extern char** environ;
     static const char* const PAPLAY[] = { /* PipeWire or PulseAudio */
         "paplay", "--raw", "--format=s16le", "--rate=44100", "--channels=1",  "--latency-msec=64", NULL
     };
@@ -52,31 +54,61 @@ static pid_t SpawnPlayer(int* outFd)
     for (int i = 0; PLAYERS[i]; i++) {
         int pipefd[2];
         pid_t pid;
+        posix_spawn_file_actions_t actions;
+        int ret;
 
-        if (pipe(pipefd) < 0)
+        if (pipe(pipefd) < 0) {
+            LogPrintErr("Failed to create audio pipe: %s\n", strerror(errno));
             continue;
+        }
 
-        pid = fork();
-        if (pid < 0) {
+        ret = posix_spawn_file_actions_init(&actions);
+        if (ret) {
+            LogPrintErr("posix_spawn_file_actions_init failed: %s\n", strerror(ret));
+            goto close_pipe;
+        }
+
+        ret = posix_spawn_file_actions_adddup2(&actions, pipefd[0], STDIN_FILENO);
+        if (ret) {
+            LogPrintErr("posix_spawn_file_actions_adddup2 failed: %s\n", strerror(ret));
+            goto destroy_actions;
+        }
+
+        if (pipefd[0] != STDIN_FILENO) {
+            ret = posix_spawn_file_actions_addclose(&actions, pipefd[0]);
+            if (ret) {
+                LogPrintErr("posix_spawn_file_actions_addclose failed: %s\n", strerror(ret));
+                goto destroy_actions;
+            }
+        }
+
+        ret = posix_spawn_file_actions_addclose(&actions, pipefd[1]);
+        if (ret) {
+            LogPrintErr("posix_spawn_file_actions_addclose failed: %s\n", strerror(ret));
+            goto destroy_actions;
+        }
+
+        ret = posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+        if (ret) {
+            LogPrintErr("posix_spawn_file_actions_addopen failed: %s\n", strerror(ret));
+            goto destroy_actions;
+        }
+
+        ret = posix_spawnp(&pid, PLAYERS[i][0], &actions, NULL, (char* const*)PLAYERS[i], environ);
+        if (ret)
+            LogPrintWrn("Failed to start %s: %s\n", PLAYERS[i][0], strerror(ret));
+
+destroy_actions:
+        posix_spawn_file_actions_destroy(&actions);
+
+        if (!ret) {
             close(pipefd[0]);
-            close(pipefd[1]);
-            continue;
-        }
-
-        if (pid == 0) {
-            /* Child: redirect stdin, suppress stderr, exec player */
-            close(pipefd[1]);
-            dup2(pipefd[0], STDIN_FILENO);
-            dup2(open("/dev/null", O_WRONLY), STDERR_FILENO);
-            execvp(PLAYERS[i][0], (char* const*)PLAYERS[i]);
-            _exit(127);
-        }
-        close(pipefd[0]);
-
-        if (!waitpid(pid, NULL, WNOHANG)) {
             *outFd = pipefd[1];
             return pid;
         }
+
+close_pipe:
+        close(pipefd[0]);
         close(pipefd[1]);
     }
 
