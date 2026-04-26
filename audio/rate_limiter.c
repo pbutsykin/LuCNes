@@ -3,6 +3,7 @@
  */
 #define CNES_AUDIO
 #define AUDIO_RATE_LIMITER
+#define _POSIX_C_SOURCE 199309L
 
 #include <time.h>
 #include <utils/utils.h>
@@ -12,6 +13,10 @@
 #define NS_PER_MS     1000000ULL
 #define MAX_DRIFT_NS  (65 * NS_PER_MS)
 #define REBUFFER_NS   (40 * NS_PER_MS)
+
+#ifndef CLOCK_MONOTONIC_RAW
+#define CLOCK_MONOTONIC_RAW CLOCK_MONOTONIC
+#endif
 
 static uint64_t GetTimeNs(void)
 {
