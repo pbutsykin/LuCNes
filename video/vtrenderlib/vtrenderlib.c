@@ -282,7 +282,6 @@ int vtr_reset(struct vtr_canvas* vt)
     }
     
     attrs.c_oflag &= ~OPOST;
-    attrs.c_cflag &= ~CREAD;
     attrs.c_lflag &= ~(ICANON | ECHO | IEXTEN);
 
     error = tcsetattr(vt->fd, TCSANOW, &attrs);
