@@ -1,6 +1,6 @@
 # Backend presets.
 
-BACKEND ?= sdl2
+BACKEND ?= sdl2# sdl2, vt, empty
 
 ifeq ($(BACKEND),sdl2)
   VIDEO_BACKEND ?= sdl2
@@ -12,6 +12,9 @@ else ifeq ($(BACKEND),vt)
   INPUT_BACKEND ?= vt
   ifeq ($(UNAME_S),Linux)
     AUDIO_BACKEND ?= pipe
+    AUDIO_RL ?= 0
+  else ifeq ($(UNAME_S),Darwin)
+    AUDIO_BACKEND ?= coreaudio
     AUDIO_RL ?= 0
   else
     AUDIO_BACKEND ?= empty

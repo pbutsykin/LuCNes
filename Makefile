@@ -64,6 +64,10 @@ ifeq ($(VIDEO_BACKEND),vt)
 	LIBS += -lm
 endif
 
+ifeq ($(AUDIO_BACKEND),coreaudio)
+	LIBS += -framework AudioToolbox
+endif
+
 ###############
 RED=\033[0;31m
 GREEN=\033[92m
