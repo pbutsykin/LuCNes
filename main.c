@@ -81,12 +81,12 @@ int main(int argc, char* const argv[])
     if (!con.cpu)
         goto fail1;
 
-    con.ppu = PpuInit(con.cpu, con.rdesc, con.mapper, &con, &cfg.ppu);
-    if (!con.ppu)
-        goto fail2;
-
     con.apu = ApuInit(con.cpu, &con);
     if (!con.apu)
+        goto fail2;
+
+    con.ppu = PpuInit(con.cpu, con.rdesc, con.mapper, &con, &cfg.ppu);
+    if (!con.ppu)
         goto fail3;
 
     con.ctl = ControllerInit(con.cpu, &con);
@@ -97,9 +97,9 @@ int main(int argc, char* const argv[])
 
     ControllerFree(con.ctl);
 fail4:
-    ApuFree(con.apu);
-fail3:
     PpuFree(con.ppu);
+fail3:
+    ApuFree(con.apu);
 fail2:
     CpuFree(con.cpu);
 fail1:

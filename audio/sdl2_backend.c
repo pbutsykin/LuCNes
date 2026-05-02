@@ -83,6 +83,12 @@ AudioBackend* AudioInit(void)
         .samples = AUDIO_BUFFER_SAMPLES,
     };
 
+    if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+        LogPrintErr("Failed SDL_Init: %s\n", SDL_GetError());
+        MemFree(audio);
+        return NULL;
+    }
+
     audio->devId = SDL_OpenAudioDevice(NULL, 0, &want, &audio->spec, 0);
     if (!audio->devId) {
         LogPrintErr("Failed SDL_OpenAudioDevice: %s\n", SDL_GetError());
