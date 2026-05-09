@@ -336,8 +336,10 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
             RegTraceW("dmc.r0", apu->cycles2x, val, reg->dmc.r0);
             reg->dmc.r0 = val;
             state->dmc.timer.period = dmcRateTable[reg->dmc.rate];
-            if (!reg->dmc.irqEnabled)
-                reg->status.dmcIrq = 0; /* Clear DMC IRQ flag */
+            if (!reg->dmc.irqEnabled) {
+                reg->status.dmcIrq = 0;
+                apu->irq = reg->status.frameIrq;
+            }
             break;
         case APU_REG_DMC_R1:
             RegTraceW("dmc.load", apu->cycles2x, val, reg->dmc.r1);
@@ -378,17 +380,18 @@ void ApuRegWrite(void* ctx, MMap* mmap, uint8_t* addr, uint8_t val)
                                       DMC_ADDR_MASK;
                 state->dmc.bytesRemaining = ((uint16_t)reg->dmc.sampleLen << 4) + 1;
             }
-            /* Clear DMC IRQ flag */
             reg->status.dmcIrq = 0;
+            apu->irq = reg->status.frameIrq;
             break;
         }
         case APU_REG_FRAME_CNT:
             RegTraceW("frame", apu->cycles2x, val, reg->frameCounter.v);
             reg->frameCounter.v = val;
 
-            if (reg->frameCounter.irqDisable)
+            if (reg->frameCounter.irqDisable) {
                 reg->status.frameIrq = false;
-
+                apu->irq = reg->status.dmcIrq;
+            }
             /* Frame counter reset is delayed by 3-4 CPU cycles:
              * - 3 cycles if write occurs during an APU cycle (odd cycles2x)
              * - 4 cycles if write occurs between APU cycles (even cycles2x)
@@ -427,8 +430,10 @@ void* ApuRegRead(void* ctx, MMap* mmap, uint8_t* addr)
         //status.unused = ((APUStatusReg)cpuOpenBus).unused;
 
         /* Reading clears frame IRQ flag */
-        if (reg->status.frameIrq)
+        if (reg->status.frameIrq) {
             reg->status.frameIrq = false;
+            apu->irq = reg->status.dmcIrq;
+        }
 
         //TODO: If an interrupt flag was set at the same moment of the read,
         //      it will read back as 1 but it will not be cleared.
