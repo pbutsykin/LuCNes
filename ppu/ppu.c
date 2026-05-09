@@ -116,10 +116,10 @@ void PpuTicksExecute(LuCNesPPU* ppu, const uint8_t cpuCycles)
                 LogPrintAssert(0, "Invalid scan line: %u\n", ppu->scanLine);
         }
 
-        if (ppu->dot > PPU_CYCLES_PER_LINE) {
+        if (ppu->dot >= PPU_CYCLES_PER_LINE) {
             ppu->scanLine++;
             //LogPrintDbg("Scan line: %u\n", ppu->scanLine);
-            ppu->dot -= PPU_CYCLES_PER_LINE + 1;
+            ppu->dot -= PPU_CYCLES_PER_LINE;
             ppu->render.lastDot = 0;
             ppu->render.rendToggleDot = 0;
         }

@@ -15,7 +15,7 @@ typedef struct _CNesConnector CNesConnector;
 #define PPU_FRAME_HEIGHT 240
 
 #define PPU_IDLE_CYCLES 1
-#define PPU_CYCLES_PER_LINE 340
+#define PPU_CYCLES_PER_LINE 341
 #define PPU_PIXELS_PER_LINE 256
 
 #define PPU_MAX_PAGES 16
