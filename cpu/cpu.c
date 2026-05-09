@@ -389,6 +389,8 @@ int32_t CpuMainLoop(LuCNesCPU* cpu)
 
         LogPrintAssert(!cpu->ioInsnCycles, "cpu->cycles: %"PRIu64", opCycles: %d\n", cpu->cycles, cpu->ioInsnCycles);
 
+        cpu->irqDisabled = reg->P.I;
+
         currOpcode = CpuMemRead8(mmap, reg->PC++);
         opCycles = CpuOpcodeExecute(currOpcode, reg, mmap);
         if (unlikely(opCycles < 0))
