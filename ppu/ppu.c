@@ -111,7 +111,7 @@ void PpuTicksExecute(LuCNesPPU* ppu, const uint8_t cpuCycles)
                 ppu->scanLine = 0;
                 ppu->oddFrame ^= true;
                 LogPrintDbg("END_OF_VBLANK\n");
-                break;
+                continue;
             default:
                 LogPrintAssert(0, "Invalid scan line: %u\n", ppu->scanLine);
         }
