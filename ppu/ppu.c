@@ -414,8 +414,8 @@ void PpuDMAWrite(void* ctx, MMap* mmap, __maybe_unused uint8_t* addr, uint8_t va
 
     LuCNesPPU* ppu = ctx;
     CNesConnector* con = ppu->con;
-    uint64_t cpuCycles = CpuReadCycles(con->cpu);
-    uint8_t oddCycles = cpuCycles & 1, opCycles = 2;
+    uint16_t cpuCycles = 0;
+    uint8_t oddCycles = CpuCyclesOdd(con->cpu), opCycles = 2;
 
     RegTrace(true, "dma", ppu->dot, val, *mmap->dma);
     RegTraceFmt('w', "dma", ppu->dot, "[copy %04x] ", VAL_TO_CPU_OFFS(val));
@@ -433,7 +433,7 @@ void PpuDMAWrite(void* ctx, MMap* mmap, __maybe_unused uint8_t* addr, uint8_t va
     opCycles = 1 + oddCycles;
     cpuCycles += opCycles;
 
-    CpuWriteCycles(con->cpu, cpuCycles);
+    CpuAddCycles(con->cpu, cpuCycles);
     PpuTicksExecute(ppu, opCycles);
     ApuTicksExecute(con->apu, opCycles);
 #undef VAL_TO_CPU_OFFS

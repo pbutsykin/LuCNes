@@ -353,14 +353,14 @@ MMap* CpuMMap(LuCNesCPU* cpu)
     return &cpu->mmap;
 }
 
-uint64_t CpuReadCycles(LuCNesCPU* cpu)
+bool CpuCyclesOdd(LuCNesCPU* cpu)
 {
-    return cpu->cycles;
+    return cpu->cycles & 1;
 }
 
-void CpuWriteCycles(LuCNesCPU* cpu, uint64_t cycles)
+void CpuAddCycles(LuCNesCPU* cpu, uint32_t add)
 {
-    cpu->cycles = cycles;
+    cpu->cycles += add;
 }
 
 int32_t CpuMainLoop(LuCNesCPU* cpu)

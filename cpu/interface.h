@@ -23,8 +23,8 @@ void CpuFree(LuCNesCPU* cpu);
 
 int32_t CpuMainLoop(LuCNesCPU* cpu);
 
-uint64_t CpuReadCycles(LuCNesCPU* cpu);
-void CpuWriteCycles(LuCNesCPU* cpu, uint64_t cycles);
+bool CpuCyclesOdd(LuCNesCPU* cpu);
+void CpuAddCycles(LuCNesCPU* cpu, uint32_t add);
 
 MMap* CpuMMap(LuCNesCPU* cpu);
 
