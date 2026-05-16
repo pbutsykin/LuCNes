@@ -36,10 +36,7 @@ typedef struct _PPUTile {
 } __attribute__((packed)) PPUTile;
 
 typedef struct _PPUPalette {
-    struct {
-        uint8_t value:6;
-        uint8_t unused:2;
-    } colors[PPU_COLORS_PER_PALETTE];
+    uint8_t colors[PPU_COLORS_PER_PALETTE];
 } __attribute__((packed)) PPUPalette;
 
 typedef struct _PPUPaletteTable {
@@ -218,13 +215,12 @@ static inline void DrawSpPixelColor(const LuCNesPPU* ppu, const uint8_t y, const
                                     const PixelSpDataSet* pixel)
 {
     PPUPalette* palette = LookupSpPalette(ppu, pixel->paletteIdx);
-    VideoSetPixel(ppu->video, y, x, palette->colors[pixel->colorIdx].value);
+    VideoSetPixel(ppu->video, y, x, palette->colors[pixel->colorIdx] & ppu->render.colorMask);
 }
 
 static inline void DrawBackDropColor(const LuCNesPPU* ppu, const uint8_t y, const uint8_t x)
 {
-    PPUPalette* palette = LookupBgPalette(ppu, 0);
-    VideoSetPixel(ppu->video, y, x, palette->colors[0].value);
+    VideoSetPixel(ppu->video, y, x, ppu->mmap.paletteTable->uniBgColor & ppu->render.colorMask);
 }
 
 static inline PPUPalette GetBgTileData(const LuCNesPPU* ppu, VRAMAddrReg cur, uint8_t* high, uint8_t* low)
@@ -280,8 +276,9 @@ static inline void PpuRenderBgTile(LuCNesPPU* ppu, uint8_t y, uint8_t x, bool sp
                 }
             }
         }
-        VideoSetPixel(ppu->video, y, x, likely(bgColorIdx) ? bgPal.colors[bgColorIdx].value :
-                                                             LookupBgPalette(ppu, 0)->colors[0].value);
+        const uint8_t bgValue = likely(bgColorIdx) ? bgPal.colors[bgColorIdx] :
+                                                     ppu->mmap.paletteTable->uniBgColor;
+        VideoSetPixel(ppu->video, y, x, bgValue & ppu->render.colorMask);
     }
 }
 

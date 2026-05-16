@@ -62,6 +62,11 @@ enum {
 #define PPU_RENDERING_ENABLED (PPU_BACKGROUND_ENABLE_MASK | PPU_SPRITE_ENABLE_MASK)
 
 enum {
+    PPU_COLOR_MASK_DEFAULT   = 0x3F,
+    PPU_COLOR_MASK_GREYSCALE = 0x30,
+}; /* PPU_COLOR_MASK */
+
+enum {
     PPU_VBLANK_READ_HW_RACE   = 0, /* This flag doesn’t exist. Let's use this bit for emulating
                                     * race condition hardware bug on reading the status register.
                                     * https://www.nesdev.org/wiki/PPU_registers#Vblank_flag
@@ -151,6 +156,7 @@ typedef struct _CNesPPU {
     struct _PPURender {
         uint16_t lastDot;
         uint16_t rendToggleDot; /* PPU dot when rendering was last toggled */
+        uint8_t colorMask;
         uint8_t lineSprites[PPU_PIXELS_PER_LINE];
         uint16_t lastTileX;
         struct {

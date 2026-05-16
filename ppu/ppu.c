@@ -278,6 +278,8 @@ static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t
             break;
         }
         case PPU_REG_MASK: {
+            const uint8_t update = val ^ reg->mask;
+
             RegTrace(write, "mask", ppu->dot, val, reg->mask);
             LogPrintAssert(write, "Not implemented(read)!\n");
 
@@ -286,8 +288,13 @@ static uint8_t* PpuRegHandle(LuCNesPPU* ppu, PPUReg* reg, uint8_t* addr, uint8_t
              * Use ppu->render.rendToggleDot to track this transition and return the old state
              * during the delay window.
              */
-            if ((val ^ reg->mask) & PPU_RENDERING_ENABLED)
+            if (update & PPU_RENDERING_ENABLED)
                 ppu->render.rendToggleDot = ppu->dot;
+
+            if (update & PPU_GREYSCALE_MASK) {
+                ppu->render.colorMask = (val & PPU_GREYSCALE_MASK) ?
+                                         PPU_COLOR_MASK_GREYSCALE : PPU_COLOR_MASK_DEFAULT;
+            }
             reg->mask = val;
             break;
         }
@@ -583,6 +590,7 @@ LuCNesPPU* PpuInit(LuCNesCPU* cpu, RomDesc* rdesc, MapperObj* mapper, void* con,
         .reg = PpuRegInit(CpuMMap(cpu)->ppuReg),
         .cfg = cfg,
         .oam = MemAlloc(PPU_OAM_SIZE),
+        .render.colorMask = PPU_COLOR_MASK_DEFAULT,
         /* https://wiki.nesdev.com/w/index.php/PPU_power_up_state
          * It is conjectured that the first VBL flag setting will be
          * close to 241 * 341/3.2 cycles (241 PAL scanlines); ... ©
