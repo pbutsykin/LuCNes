@@ -17,7 +17,7 @@ void PpuFree(LuCNesPPU* ppu);
 
 PPUMMap* PpuMMap(LuCNesPPU* ppu);
 
-void PpuTicksExecute(LuCNesPPU* ppu, const uint8_t cpuCycles);
+void PpuTicksExecute(LuCNesPPU* ppu, const uint32_t cpuCycles);
 
 void* PpuRegRead(void* ppu, MMap* mmap, uint8_t* addr);
 void PpuRegWrite(void* ppu, MMap* mmap, uint8_t* addr, uint8_t val);
@@ -26,6 +26,7 @@ void* PpuDMARead(void* ppu, MMap* mmap, uint8_t* addr);
 void PpuDMAWrite(void* ppu, MMap* mmap, uint8_t* addr, uint8_t val);
 
 bool PpuCheckNMI(LuCNesPPU* ppu);
+uint32_t PpuCyclesToNMI(LuCNesPPU* ppu);
 
 void PpuDebugDumpState(MMap* mmap);
 

@@ -67,7 +67,7 @@ uint8_t* PpuStatusRead(LuCNesPPU* ppu, PPUReg* reg)
     return &oldPPUState;
 }
 
-void PpuTicksExecute(LuCNesPPU* ppu, const uint8_t cpuCycles)
+void PpuTicksExecute(LuCNesPPU* ppu, const uint32_t cpuCycles)
 {
 #define CPU_TO_PPU_CYCLES(__cc) (((__cc) << 1) + (__cc))
 
@@ -124,6 +124,21 @@ void PpuTicksExecute(LuCNesPPU* ppu, const uint8_t cpuCycles)
             ppu->render.rendToggleDot = 0;
         }
     } while (ppu->render.lastDot != ppu->dot);
+}
+
+uint32_t PpuCyclesToNMI(LuCNesPPU* ppu)
+{
+#define PPU_TO_CPU_CYCLES(__pc) DIV_ROUND_UP(__pc, 3)
+
+    const uint32_t curr = (ppu->scanLine * PPU_CYCLES_PER_LINE) + ppu->dot;
+    const uint32_t vblankDot = (PPU_VBLANK_LINE * PPU_CYCLES_PER_LINE) + 2;
+    int32_t dist = vblankDot - curr;
+
+    if (dist < 0) {
+        const uint32_t vblankEnd = PPU_VBLANK_END * PPU_CYCLES_PER_LINE;
+        dist += vblankEnd;
+    }
+    return PPU_TO_CPU_CYCLES(dist);
 }
 
 enum {

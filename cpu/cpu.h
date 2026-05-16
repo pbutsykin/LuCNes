@@ -61,7 +61,10 @@ typedef struct _CNesCPU {
     uint64_t cycles;
     uint8_t ioInsnCycles;
     bool irqDisabled;
-
+    struct {
+        uint32_t pending;
+        uint32_t deadline;
+    } sync;
     CNesConnector* con;
 #ifdef CNES_TEST
     uint32_t maxCycles;

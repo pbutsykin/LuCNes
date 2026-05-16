@@ -785,14 +785,12 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
     }
 }
 
-void ApuTicksExecute(LuCNesAPU* apu, const uint8_t cpuCycles)
+void ApuTicksExecute(LuCNesAPU* apu, const uint32_t cpuCycles)
 {
     APUReg* reg = apu->reg;
     APUState* state = &apu->state;
 
-    for (int i = 0; i < cpuCycles; i++) {
-        apu->irq = reg->status.frameIrq || reg->status.dmcIrq;
-
+    for (uint32_t i = 0; i < cpuCycles; i++) {
         ApuProcessPendingFrameSignals(apu);
 
         /* APU runs at half CPU rate for sequencer/pulse/noise/DMC */
@@ -833,6 +831,47 @@ void ApuTicksExecute(LuCNesAPU* apu, const uint8_t cpuCycles)
         }
         apu->cycles2x++;
     }
+    apu->irq = reg->status.frameIrq || reg->status.dmcIrq;
+}
+
+static uint32_t ApuCyclesToFrameIRQ(LuCNesAPU* apu)
+{
+    APUReg* reg = apu->reg;
+    APUFrameCounter* frame = &apu->state.frame;
+
+    if (unlikely(!reg->frameCounter.mode && frame->step <= 3 && !reg->frameCounter.irqDisable)) {
+        const uint16_t frameIrqTicks = 14914;
+        uint32_t apuCyclesToFrameIrq = (frameIrqTicks - frame->countdown) + 1;
+        uint8_t phase = !(apu->cycles2x & 1);
+
+        return (apuCyclesToFrameIrq << 1) + phase;
+    }
+    return UINT32_MAX;
+}
+
+static uint32_t ApuCyclesToDmcIRQ(LuCNesAPU* apu)
+{
+    APUStateDMC* dmc = &apu->state.dmc;
+    APUChannelDMC* reg = &apu->reg->dmc;
+    uint32_t dmcClocksToIrq, apuCyclesToDmcIrq;
+
+    if (likely(!reg->irqEnabled || reg->loop || !dmc->bytesRemaining))
+        return UINT32_MAX;
+
+    if (unlikely(dmc->bufferEmpty))
+        return 2;
+
+    dmcClocksToIrq = dmc->bitsRemaining + (dmc->bytesRemaining - 1) * BYTE_BITS;
+    apuCyclesToDmcIrq = dmc->timer.countdown + (dmcClocksToIrq - 1) * dmc->timer.period;
+    return apuCyclesToDmcIrq << 1;
+}
+
+uint32_t ApuCyclesToIRQ(LuCNesAPU* apu)
+{
+    uint32_t nextFrameIRQ = ApuCyclesToFrameIRQ(apu);
+    uint32_t nextDmcIRQ = ApuCyclesToDmcIRQ(apu);
+
+    return MIN(nextFrameIRQ, nextDmcIRQ);
 }
 
 LuCNesAPU* ApuInit(LuCNesCPU* cpu, void* connector)

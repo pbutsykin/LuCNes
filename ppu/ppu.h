@@ -145,7 +145,8 @@ typedef struct _CNesPPU {
         uint8_t w;
     } iRegs;
 
-    uint16_t scanLine, dot;
+    uint16_t scanLine;
+    uint32_t dot;
     bool oddFrame;
     struct _PPURender {
         uint16_t lastDot;

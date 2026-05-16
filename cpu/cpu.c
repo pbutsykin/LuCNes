@@ -111,15 +111,39 @@ static inline void CpuDevMapperReload16(void* ctx, MMap* mmap, uint16_t* addr, u
     CpuDevMapperReload8(ctx, mmap, (uint8_t*)addr, val);
 }
 
-static inline void CpuSyncDevices(LuCNesCPU* cpu, uint8_t cycles)
+static inline void CpuUpdateSyncDeadline(LuCNesCPU* cpu)
+{
+    uint32_t nextNmi = PpuCyclesToNMI(cpu->con->ppu);
+    uint32_t nextIrq = ApuCyclesToIRQ(cpu->con->apu);
+
+    cpu->sync.deadline = MIN(nextNmi, nextIrq);
+}
+
+static void CpuSyncDevices(LuCNesCPU* cpu)
+{
+    uint32_t pending = cpu->sync.pending + cpu->ioInsnCycles;
+
+    cpu->sync.pending = cpu->ioInsnCycles = 0;
+    if (likely(pending)) {
+        cpu->cycles += pending;
+        PpuTicksExecute(cpu->con->ppu, pending);
+        ApuTicksExecute(cpu->con->apu, pending);
+    }
+    CpuUpdateSyncDeadline(cpu);
+}
+
+static inline void CpuTick(LuCNesCPU* cpu, uint8_t cycles)
 {
     if (unlikely(!cycles))
         return;
 
-    cpu->cycles += cycles;
-    PpuTicksExecute(cpu->con->ppu, cycles);
-    ApuTicksExecute(cpu->con->apu, cycles);
+    cpu->sync.pending += cycles;
     cpu->ioInsnCycles = 0;
+
+    if (likely(cpu->sync.pending < cpu->sync.deadline))
+        return;
+
+    CpuSyncDevices(cpu);
 }
 
 static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_t addr, bool write)
@@ -139,7 +163,7 @@ static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_
                 .cpuRead = PpuRegRead,
                 .cpuWrite8 = PpuRegWrite,
             };
-            CpuSyncDevices(cpu, cpu->ioInsnCycles);
+            CpuSyncDevices(cpu);
             break;
         case SOUND_REG:
             *mdev = (CpuMappedDevMemory) {
@@ -147,7 +171,7 @@ static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_
                 .ctx = cpu->con->apu,
                 .cpuWrite8 = ApuRegWrite,
             };
-            CpuSyncDevices(cpu, cpu->ioInsnCycles);
+            CpuSyncDevices(cpu);
             break;
         case CPU_DMA:
             *mdev = (CpuMappedDevMemory) {
@@ -156,7 +180,7 @@ static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_
                 .cpuRead = PpuDMARead,
                 .cpuWrite8 = PpuDMAWrite,
             };
-            CpuSyncDevices(cpu, cpu->ioInsnCycles);
+            CpuSyncDevices(cpu);
             break;
         case SOUND_CHAN:
             *mdev = (CpuMappedDevMemory) {
@@ -165,7 +189,7 @@ static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_
                 .cpuRead = ApuRegRead,
                 .cpuWrite8 = ApuRegWrite,
             };
-            CpuSyncDevices(cpu, cpu->ioInsnCycles);
+            CpuSyncDevices(cpu);
             break;
         case JOY_PAD1:
             *mdev = (CpuMappedDevMemory) {
@@ -183,7 +207,7 @@ static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_
                     .ctx = cpu->con->apu,
                     .cpuWrite8 = ApuRegWrite,
                 };
-                CpuSyncDevices(cpu, cpu->ioInsnCycles);
+                CpuSyncDevices(cpu);
             } else {
                 *mdev = (CpuMappedDevMemory) {
                     .addr = mmap->joy2,
@@ -206,6 +230,7 @@ static void CpuSlowResolveAddr(LuCNesCPU* cpu, CpuMappedDevMemory* mdev, uint16_
                     .cpuWrite8 = CpuDevMapperReload8,
                     .cpuWrite16 = CpuDevMapperReload16,
                 };
+                CpuSyncDevices(cpu);
                 break;
             }
             mdev->addr = MMapPrgResolve(mmap, addr);
@@ -274,6 +299,7 @@ inline void CpuMemWrite8(MMap* mmap, uint16_t addr, uint8_t val)
     };
     CpuSlowResolveAddr(cpu, &mdev, addr, true);
     mdev.cpuWrite8(mdev.ctx, mmap, mdev.addr, val);
+    CpuUpdateSyncDeadline(cpu);
 }
 
 inline static void CpuRegistersReset(MMap* mmap, CpuReg* reg)
@@ -316,7 +342,7 @@ static void CpuInitTestState(__maybe_unused LuCNesCPU* cpu, __maybe_unused CNesC
         cpu->cycles = test->cycles ?: cpu->cycles;
         cpu->maxCycles = test->maxCycles ?: 0;
     }
-#define StopTest(_cpu) ((_cpu)->maxCycles && (_cpu)->cycles > (_cpu)->maxCycles)
+#define StopTest(_cpu) ((_cpu)->maxCycles && ((_cpu)->cycles + (_cpu)->sync.pending) > (_cpu)->maxCycles)
 #else
 #define StopTest(_) false
 #endif
@@ -355,12 +381,13 @@ MMap* CpuMMap(LuCNesCPU* cpu)
 
 bool CpuCyclesOdd(LuCNesCPU* cpu)
 {
-    return cpu->cycles & 1;
+    return (cpu->cycles + cpu->sync.pending) & 1;
 }
 
 void CpuAddCycles(LuCNesCPU* cpu, uint32_t add)
 {
     cpu->cycles += add;
+    cpu->sync.pending = cpu->sync.deadline = 0;
 }
 
 int32_t CpuMainLoop(LuCNesCPU* cpu)
@@ -379,15 +406,16 @@ int32_t CpuMainLoop(LuCNesCPU* cpu)
 
         if (unlikely(PpuCheckNMI(ppu))) {
             CpuExecuteNMI(reg, mmap);
-            CpuSyncDevices(cpu, 7);
+            CpuTick(cpu, 7);
         }
 
         if (unlikely(!cpu->irqDisabled && ApuCheckIRQ(apu))) {
             CpuExecuteIRQ(reg, mmap);
-            CpuSyncDevices(cpu, 7);
+            CpuTick(cpu, 7);
         }
 
-        LogPrintAssert(!cpu->ioInsnCycles, "cpu->cycles: %"PRIu64", opCycles: %d\n", cpu->cycles, cpu->ioInsnCycles);
+        LogPrintAssert(!cpu->ioInsnCycles, "cpu->cycles: %"PRIu64", ioInsnCycles: %d\n",
+                       cpu->cycles + cpu->sync.pending, cpu->ioInsnCycles);
 
         cpu->irqDisabled = reg->P.I;
 
@@ -396,7 +424,7 @@ int32_t CpuMainLoop(LuCNesCPU* cpu)
         if (unlikely(opCycles < 0))
             break;
 
-        CpuSyncDevices(cpu, opCycles);
+        CpuTick(cpu, opCycles);
     } while(true);
 
     return 0;

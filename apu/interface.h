@@ -8,12 +8,13 @@
 
 typedef struct _MMap MMap;
 
-void ApuTicksExecute(LuCNesAPU* apu, const uint8_t cpuCycles);
+void ApuTicksExecute(LuCNesAPU* apu, const uint32_t cpuCycles);
 
 void ApuRegWrite(void* apu, MMap* mmap, uint8_t* addr, uint8_t val);
 void* ApuRegRead(void* apu, MMap* mmap, uint8_t* addr);
 
 bool ApuCheckIRQ(LuCNesAPU* apu);
+uint32_t ApuCyclesToIRQ(LuCNesAPU* apu);
 
 LuCNesAPU* ApuInit(LuCNesCPU* cpu, void* connector);
 void ApuFree(LuCNesAPU* apu);
