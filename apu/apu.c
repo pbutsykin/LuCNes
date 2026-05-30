@@ -608,10 +608,8 @@ static void ApuDMCTick(LuCNesAPU* apu, uint32_t apuTicks)
     if (unlikely(!--dmc->bitsRemaining)) {
         dmc->bitsRemaining = BYTE_BITS;
 
-        if (dmc->bufferEmpty)
-            dmc->silence = true; /* If sample buffer is empty, silence flag is set */
-        else {
-            dmc->silence = false;
+        dmc->silence = dmc->bufferEmpty; /* Set silence flag if sample buffer is empty. */
+        if (!dmc->silence) {
             dmc->bufferEmpty = true;
             dmc->shiftReg = dmc->sampleBuf;
         }
