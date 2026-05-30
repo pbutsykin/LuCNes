@@ -447,7 +447,18 @@ void* ApuRegRead(void* ctx, MMap* mmap, uint8_t* addr)
     return addr;
 }
 
-static void ApuPulseTick(APUStatePulse* pulse, APUChannelPulse* reg)
+static inline uint32_t ApuTimerSkipWraps(APUTimer* timer, uint32_t ticks)
+{
+    LogPrintAssert(ticks > timer->countdown, "Ticks must exceed timer->countdown.");
+
+    const uint32_t period = timer->period + 1;
+    const uint32_t over = ticks - timer->countdown - 1;
+
+    timer->countdown = timer->period - over % period;
+    return over / period + 1;
+}
+
+static void ApuPulseTick(APUStatePulse* pulse, APUChannelPulse* reg, uint32_t apuTicks)
 {
     /* https://www.nesdev.org/wiki/APU_Pulse
      *
@@ -456,51 +467,67 @@ static void ApuPulseTick(APUStatePulse* pulse, APUChannelPulse* reg)
      * 0, 7, 6, 5, 4, 3, 2, 1.
      */
 
-    if (likely(pulse->timer.countdown))
-        pulse->timer.countdown--;
-    else {
-        pulse->timer.countdown = pulse->timer.period;
-        pulse->dutyIdx = (pulse->dutyIdx - 1) & 7;
-        pulse->output = ApuPulseOutput(pulse, reg);
+    if (likely(apuTicks <= pulse->timer.countdown)) {
+        pulse->timer.countdown -= apuTicks;
+        return;
     }
+
+    if (unlikely(pulse->sweep.mute || !pulse->lengthCounter)) {
+        pulse->dutyIdx = (pulse->dutyIdx - ApuTimerSkipWraps(&pulse->timer, apuTicks)) & 7;
+        return;
+    }
+
+    LogPrintAssert(apuTicks == pulse->timer.countdown + 1u, "apuTicks overflow");
+
+    pulse->timer.countdown = pulse->timer.period;
+    pulse->dutyIdx = (pulse->dutyIdx - 1) & 7;
+    pulse->output = ApuPulseOutput(pulse, reg);
 }
 
-static void ApuTriangleTick(APUStateTriangle* tri)
+static void ApuTriangleTick(APUStateTriangle* tri, uint32_t cycles)
 {
-    if (likely(tri->timer.countdown))
-        tri->timer.countdown--;
-    else {
-        tri->timer.countdown = tri->timer.period;
-        /* Only step if length counter and linear counter are non-zero */
-        if (tri->lengthCounter && tri->linearCounter) {
-            LuCNesAPU* apu = CONTAINER_OF(tri, LuCNesAPU, state.triangle);
-            tri->sequenceIdx = (tri->sequenceIdx + 1) & 31;
-            tri->output = ApuTriangleOutput(tri);
-            apu->outputMix = ApuGetMixedSample(apu);
-        }
+    if (likely(cycles <= tri->timer.countdown)) {
+        tri->timer.countdown -= cycles;
+        return;
     }
+
+    if (unlikely(!tri->lengthCounter || !tri->linearCounter)) {
+        ApuTimerSkipWraps(&tri->timer, cycles);
+        return;
+    }
+
+    LogPrintAssert(cycles == tri->timer.countdown + 1u, "cycles overflow");
+
+    tri->timer.countdown = tri->timer.period;
+    tri->sequenceIdx = (tri->sequenceIdx + 1) & 31;
+    tri->output = ApuTriangleOutput(tri);
 }
 
-static void ApuNoiseTick(APUStateNoise* noise, APUChannelNoise* reg)
+static void ApuNoiseTick(APUStateNoise* noise, APUChannelNoise* reg, uint32_t apuTicks)
 {
 #define NOISE_LFSR_TAP_MODE0 1
 #define NOISE_LFSR_TAP_MODE1 6
 #define NOISE_LFSR_LEFTMOST_BIT 14
 
     /* The period determines how many APU cycles happen between shift register clocks. */
-    if (unlikely(!--noise->timer.countdown)) {
-        /* Calculate feedback bit. https://www.nesdev.org/wiki/APU_Noise */
-        uint8_t bit = reg->mode ? NOISE_LFSR_TAP_MODE1 : NOISE_LFSR_TAP_MODE0;
-        uint8_t feedback = (noise->shiftReg ^ (noise->shiftReg >> bit)) & 1;
+    if (likely(apuTicks < noise->timer.countdown)) {
+        noise->timer.countdown -= apuTicks;
+        return;
+    }
 
-        noise->timer.countdown = noise->timer.period;
-        noise->shiftReg >>= 1;
-        noise->shiftReg |= feedback << NOISE_LFSR_LEFTMOST_BIT;
-        if (noise->lengthCounter) {
-            LuCNesAPU* apu = CONTAINER_OF(noise, LuCNesAPU, state.noise);
-            noise->output = ApuNoiseOutput(noise, reg);
-            apu->tndIndexBase = noise->output + apu->state.dmc.outputLevel;
-        }
+    LogPrintAssert(noise->timer.countdown == apuTicks, "apuTicks overflow");
+
+    /* Calculate feedback bit. https://www.nesdev.org/wiki/APU_Noise */
+    uint8_t bit = reg->mode ? NOISE_LFSR_TAP_MODE1 : NOISE_LFSR_TAP_MODE0;
+    uint8_t feedback = (noise->shiftReg ^ (noise->shiftReg >> bit)) & 1;
+
+    noise->timer.countdown = noise->timer.period;
+    noise->shiftReg >>= 1;
+    noise->shiftReg |= feedback << NOISE_LFSR_LEFTMOST_BIT;
+    if (noise->lengthCounter) {
+        LuCNesAPU* apu = CONTAINER_OF(noise, LuCNesAPU, state.noise);
+        noise->output = ApuNoiseOutput(noise, reg);
+        apu->tndIndexBase = noise->output + apu->state.dmc.outputLevel;
     }
 }
 
@@ -560,26 +587,33 @@ static void DmcMemoryReaderTick(LuCNesAPU* apu, APUStateDMC* dmc)
 /*
  * https://www.nesdev.org/wiki/APU_DMC
  */
-static void ApuDMCTick(LuCNesAPU* apu)
+static void ApuDMCTick(LuCNesAPU* apu, uint32_t apuTicks)
 {
     APUStateDMC* dmc = &apu->state.dmc;
 
-    if (unlikely(!--dmc->timer.countdown)) {
-        dmc->timer.countdown = dmc->timer.period;
+    if (likely(apuTicks < dmc->timer.countdown)) {
+        dmc->timer.countdown -= apuTicks;
+        DmcMemoryReaderTick(apu, dmc);
+        return;
+    }
+    LogPrintAssert(apuTicks == dmc->timer.countdown, "apuTicks overflow");
 
-        DmcOutputTick(dmc);
+    if (apuTicks > 1)
+        DmcMemoryReaderTick(apu, dmc);
 
-        /* When bits remaining becomes 0, a new output cycle starts */
-        if (unlikely(!--dmc->bitsRemaining)) {
-            dmc->bitsRemaining = BYTE_BITS;
+    dmc->timer.countdown = dmc->timer.period;
+    DmcOutputTick(dmc);
 
-            if (dmc->bufferEmpty)
-                dmc->silence = true; /* If sample buffer is empty, silence flag is set */
-            else {
-                dmc->silence = false;
-                dmc->bufferEmpty = true;
-                dmc->shiftReg = dmc->sampleBuf;
-            }
+    /* When bits remaining becomes 0, a new output cycle starts */
+    if (unlikely(!--dmc->bitsRemaining)) {
+        dmc->bitsRemaining = BYTE_BITS;
+
+        if (dmc->bufferEmpty)
+            dmc->silence = true; /* If sample buffer is empty, silence flag is set */
+        else {
+            dmc->silence = false;
+            dmc->bufferEmpty = true;
+            dmc->shiftReg = dmc->sampleBuf;
         }
     }
     DmcMemoryReaderTick(apu, dmc);
@@ -673,16 +707,22 @@ static inline void ApuFlushFrameSignals(LuCNesAPU* apu)
     }
 }
 
-static void ApuFrameCounterTick(LuCNesAPU* apu)
+static const uint16_t frameSteps[] = {3728, 7456, 11185, 14914, 18640};
+
+static void ApuFrameCounterTick(LuCNesAPU* apu, uint32_t apuTicks)
 {
-    static const uint16_t frameSteps[] = {3728, 7456, 11185, 14914, 18640};
     APUReg* reg = apu->reg;
     APUState* state = &apu->state;
     APUFrameCounter* frame = &state->frame;
     const uint8_t maxSteps = sizeof(frameSteps) / sizeof(frameSteps[0]) - !reg->frameCounter.mode;
+    const uint16_t target = frameSteps[frame->step];
 
-    if (frame->countdown++ < frameSteps[frame->step])
+    if (likely(frame->countdown + apuTicks <= target)) {
+        frame->countdown += apuTicks;
         return;
+    }
+    LogPrintAssert(frame->countdown + apuTicks == target + 1u, "apuTicks overflow");
+    frame->countdown = target + 1;
 
     /* Schedule frame signals with 1 cpu cycle delay.
      * https://www.nesdev.org/wiki/APU_Frame_Counter
@@ -755,10 +795,14 @@ static void ApuMixerInit(void)
                                  (100 * (TND_MIX_DEN_BASE + MIX_DEN_OFFSET * i)));
 }
 
-static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
+static bool ApuProcessPendingFrameSignals(LuCNesAPU* apu)
 {
     APUReg* reg = apu->reg;
     APUFrameCounter* frame = &apu->state.frame;
+
+    if (likely(!frame->pendingIrq && !frame->pendingQuarter &&
+               !frame->pendingHalf && !frame->resetDelay))
+        return false;
 
     if (unlikely(frame->pendingIrq)) {
         /* Set IRQ on consecutive cpu cycles (14914.5 and 0(14915)).
@@ -783,36 +827,68 @@ static void ApuProcessPendingFrameSignals(LuCNesAPU* apu)
             ApuUpdateOutput(apu);
         }
     }
+    return true;
 }
 
-void ApuTicksExecute(LuCNesAPU* apu, const uint32_t cpuCycles)
+static uint32_t ApuCyclesToChannelEvent(LuCNesAPU* apu, uint32_t halfPhase)
+{
+#define APU_TO_CPU_CYCLES(H) (((uint32_t)(H) << 1) - halfPhase)
+
+    APUState* state = &apu->state;
+    APUFrameCounter* frame = &state->frame;
+    uint32_t cycles = UINT32_MAX;
+
+    if (state->triangle.lengthCounter && state->triangle.linearCounter)
+        cycles = (uint32_t)state->triangle.timer.countdown + 1;
+
+    if (!state->pulse1.sweep.mute && state->pulse1.lengthCounter)
+        cycles = MIN(cycles, APU_TO_CPU_CYCLES(state->pulse1.timer.countdown + 1));
+
+    if (!state->pulse2.sweep.mute && state->pulse2.lengthCounter)
+        cycles = MIN(cycles, APU_TO_CPU_CYCLES(state->pulse2.timer.countdown + 1));
+
+    cycles = MIN(cycles, APU_TO_CPU_CYCLES(state->noise.timer.countdown));
+    cycles = MIN(cycles, APU_TO_CPU_CYCLES(state->dmc.timer.countdown));
+    cycles = MIN(cycles, APU_TO_CPU_CYCLES(frameSteps[frame->step] - frame->countdown + 1));
+    cycles = MIN(cycles, (CPU_CLOCK_RATE - apu->sampleCycleAccum + AUDIO_SAMPLE_RATE - 1) / AUDIO_SAMPLE_RATE);
+    return cycles;
+}
+
+void ApuTicksExecute(LuCNesAPU* apu, uint32_t cpuCycles)
 {
     APUReg* reg = apu->reg;
     APUState* state = &apu->state;
 
-    for (uint32_t i = 0; i < cpuCycles; i++) {
-        ApuProcessPendingFrameSignals(apu);
+    while (cpuCycles) {
+        const uint32_t halfPhase = apu->cycles2x & 1;
+        uint32_t stepCycles = 1;
+
+        if (!ApuProcessPendingFrameSignals(apu))
+            stepCycles = MIN(cpuCycles, ApuCyclesToChannelEvent(apu, halfPhase));
+
+        const uint32_t apuTicks = (stepCycles + halfPhase) >> 1;
+        const uint32_t prevMix = apu->outputMix;
 
         /* APU runs at half CPU rate for sequencer/pulse/noise/DMC */
-        if (apu->cycles2x & 1) {
-            ApuFrameCounterTick(apu);
-            ApuPulseTick(&state->pulse1, &reg->pulse1);
-            ApuPulseTick(&state->pulse2, &reg->pulse2);
-            ApuNoiseTick(&state->noise, &reg->noise);
-            ApuDMCTick(apu);
-            apu->outputMix = ApuGetMixedSample(apu);
+        if (apuTicks) {
+            ApuFrameCounterTick(apu, apuTicks);
+            ApuPulseTick(&state->pulse1, &reg->pulse1, apuTicks);
+            ApuPulseTick(&state->pulse2, &reg->pulse2, apuTicks);
+            ApuNoiseTick(&state->noise, &reg->noise, apuTicks);
+            ApuDMCTick(apu, apuTicks);
         }
         /* Triangle runs at CPU rate */
-        ApuTriangleTick(&state->triangle);
+        ApuTriangleTick(&state->triangle, stepCycles);
+        apu->outputMix = ApuGetMixedSample(apu);
 
         /* Mix and accumulate channel outputs */
-        apu->sampleAccum += apu->outputMix;
-        apu->sampleCount++;
+        apu->sampleAccum += prevMix * (stepCycles - 1) + apu->outputMix;
+        apu->sampleCount += stepCycles;
 
         /* Output sample at target rate using precise fractional timing
          * Add AUDIO_SAMPLE_RATE per cycle, output when >= CPU_CLOCK_RATE
          */
-        apu->sampleCycleAccum += AUDIO_SAMPLE_RATE;
+        apu->sampleCycleAccum += AUDIO_SAMPLE_RATE * stepCycles;
         if (unlikely(apu->sampleCycleAccum >= CPU_CLOCK_RATE)) {
             int32_t avgSample = apu->sampleAccum / apu->sampleCount;
 
@@ -829,7 +905,8 @@ void ApuTicksExecute(LuCNesAPU* apu, const uint32_t cpuCycles)
             apu->sampleCount = 0;
             apu->sampleCycleAccum -= CPU_CLOCK_RATE;
         }
-        apu->cycles2x++;
+        apu->cycles2x += stepCycles;
+        cpuCycles -= stepCycles;
     }
     apu->irq = reg->status.frameIrq || reg->status.dmcIrq;
 }
