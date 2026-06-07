@@ -145,6 +145,8 @@ $(eval $(call mktest, apu/12-irq_timing, --max_cycles 0xe0f7d))
 
 $(eval $(call mktest, mapper/mmc1_sbrom, --max_cycles 0xe25d))
 $(eval $(call mktest, mapper/mmc1_sgrom, --max_cycles 0xe43f))
+$(eval $(call mktest, mapper/uxrom_0, --max_cycles 0xe25b))
+$(eval $(call mktest, mapper/uxrom_1, --max_cycles 0xe25b))
 $(eval $(call mktest, mapper/cnrom_0, --max_cycles 0xe259))
 $(eval $(call mktest, mapper/axrom_0, --max_cycles 0x1f192))
 
