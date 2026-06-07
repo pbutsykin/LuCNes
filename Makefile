@@ -150,6 +150,8 @@ $(eval $(call mktest, mapper/uxrom_1, --max_cycles 0xe25b))
 $(eval $(call mktest, mapper/cnrom_0, --max_cycles 0xe259))
 $(eval $(call mktest, mapper/axrom_0, --max_cycles 0x1f192))
 
+$(eval $(call mktest, submapper/2_test_1, --max_cycles 0x146cfc))
+$(eval $(call mktest, submapper/2_test_2, --max_cycles 0x146cfc))
 $(eval $(call mktest, submapper/3_test_1, --max_cycles 0x13843b))
 $(eval $(call mktest, submapper/3_test_2, --max_cycles 0x13843b))
 $(eval $(call mktest, submapper/7_test_1, --max_cycles 0x11b099))
