@@ -212,7 +212,7 @@ int NES2Open(MFile* file, RomDesc* rdesc)
     LogPrintAssert(!nes2->prgRamSize, "NES2: PRG-RAM is not supported. nes2->prgRamSize: %d\n", nes2->prgRamSize);
     LogPrintAssert(!nes2->eepromSize, "NES2: EEPROM is not supported. nes2->eepromSize: %d\n", nes2->eepromSize);
     LogPrintAssert(!nes2->chrNVRamSize, "NES2: CHR-NVRAM is not supported. nes2->chrNVRamSize: %d\n", nes2->chrNVRamSize);
-    LogPrintAssert(nes2->timing == NTSC, "NES2: Timing: %d is not supported.\n", nes2->timing);
+    LogPrintAssert(nes2->timing == NTSC || nes2->timing == Multiple, "NES2: Timing: %d is not supported.\n", nes2->timing);
     LogPrintAssert(!(nes2->hdr.flags7.vsu || nes2->hdr.flags7.pc10), "NES2: Vs. System Type or Extended Console Type is not supported.\n");
     LogPrintAssert(!nes2->miscRom, "NES2: Miscellaneous ROM areas is not supported. miscRom: %d\n", nes2->miscRom);
     LogPrintAssert(nes2->defaultExpDevice == DED_UNSPECIFIED || nes2->defaultExpDevice == DED_STANDARD_NES_CONTROLLERS,
