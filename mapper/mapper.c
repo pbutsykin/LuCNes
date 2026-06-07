@@ -11,6 +11,7 @@
 
 #include "mapper.h"
 #include "mmc1.h"
+#include "uxrom.h"
 #include "cnrom.h"
 #include "axrom.h"
 
@@ -85,7 +86,8 @@ static const MapperId MapperList[] = {
                 MapperPrgInitDefault, MapperNameTableInitDefault, MapperBankSwitchDefault),
     MAPPER_INIT(MAP_MMC1, MMC1_PRG_WIN_SIZE, MMC1_CHR_WIN_SIZE, Mmc1MapperInit,
                 Mmc1PrgInit, Mmc1NameTableInit, Mmc1BankSwitch),
-    MAPPER_UNDEFINED(MAP_UXROM),
+    MAPPER_INIT(MAP_UXROM, UXROM_PRG_WIN_SIZE, UXROM_CHR_WIN_SIZE, NULL,
+                UxRomPrgInit, MapperNameTableInitDefault, UxRomBankSwitch),
     MAPPER_INIT(MAP_CNROM, CNROM_PRG_WIN_SIZE, CNROM_CHR_WIN_SIZE, NULL,
                 MapperPrgInitDefault, MapperNameTableInitDefault, CnRomBankSwitch),
     MAPPER_UNDEFINED(MAP_MMC3),
