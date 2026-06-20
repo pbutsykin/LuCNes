@@ -428,15 +428,14 @@ static inline bool IsSpriteZeroHit(const LuCNesPPU* ppu, uint16_t end)
     return ppu->render.sp0.hit && x >= ppu->render.lastDot && x < end;
 }
 
-static void VisibleScanLineNoRender(LuCNesPPU* ppu)
+static void VisibleScanLineNoRender(LuCNesPPU* ppu, uint16_t endX)
 {
-    if (ppu->dot > PPU_PIXELS_PER_LINE)
-        return;
-
     // assert vadrr > $3F00 && vaddr < $3FFF
     /* https://wiki.nesdev.com/w/index.php/PPU_palettes#The_background_palette_hack
      * XXX: implement background palette hack
      */
+    for (uint16_t x = ppu->render.lastDot; x < endX; x++)
+        DrawBackDropColor(ppu, ppu->scanLine, x);
 }
 
 static inline void ResetOAMAddr(PPUReg* reg)
@@ -473,7 +472,7 @@ void PpuVisibleLineRender(LuCNesPPU* ppu)
 
                     PpuRenderTiles(ppu, ppu->scanLine, MIN(endTileX + 2, PPU_LINE_TILES));
                 } else
-                    VisibleScanLineNoRender(ppu);
+                    VisibleScanLineNoRender(ppu, nextCycleStage);
 
                 if (IsSpriteZeroHit(ppu, nextCycleStage)) {
                     LogPrintDbg("SpriteZeroHit set: %d\n", ppu->render.lastDot);
