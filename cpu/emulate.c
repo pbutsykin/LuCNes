@@ -259,14 +259,11 @@ static inline void inc_base(CpuReg* reg, MMap* mmap, uint16_t addr)
 static inline void dcp_base(CpuReg* reg, MMap* mmap, uint16_t addr)
 {
     uint8_t val = CpuMemRead8(mmap, addr) - 1;
-    uint8_t sub = reg->A - val;
-
-    FLAG_UPDATE(reg->P, CFLAG, val <= reg->A);
-    FLAG_UPDATE(reg->P, NFLAG, sub);
-    FLAG_UPDATE(reg->P, ZFLAG, sub);
 
     CpuDummyCycle(mmap);
     CpuMemWrite8(mmap, addr, val);
+
+    cmp_base(reg, val);
 }
 
 static inline void slo_base(CpuReg* reg, MMap* mmap, uint16_t addr)
@@ -279,9 +276,7 @@ static inline void slo_base(CpuReg* reg, MMap* mmap, uint16_t addr)
     CpuDummyCycle(mmap);
     CpuMemWrite8(mmap, addr, val);
 
-    reg->A |= val;
-    FLAG_UPDATE(reg->P, NFLAG, reg->A);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->A);
+    ora_base(reg, val);
 }
 
 static inline void rla_base(CpuReg* reg, MMap* mmap, uint16_t addr)
@@ -295,9 +290,7 @@ static inline void rla_base(CpuReg* reg, MMap* mmap, uint16_t addr)
     CpuDummyCycle(mmap);
     CpuMemWrite8(mmap, addr, val);
 
-    reg->A &= val;
-    FLAG_UPDATE(reg->P, NFLAG, reg->A);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->A);
+    and_base(reg, val);
 }
 
 static inline void sre_base(CpuReg* reg, MMap* mmap, uint16_t addr)
