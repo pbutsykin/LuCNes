@@ -137,19 +137,27 @@ static inline PPUPalette* LookupSpPalette(const LuCNesPPU* ppu, const uint8_t id
     return &ppu->mmap.paletteTable->spPallets[idx];
 }
 
+#define PPU_RENDER_TOGGLE_DELAY 3
+
+static inline uint16_t ToggleEffectiveDot(const LuCNesPPU* ppu)
+{
+    return ppu->render.rendToggleDot + PPU_RENDER_TOGGLE_DELAY;
+}
+
 /* Toggling rendering takes effect approximately 3-4 dots after the write.
  * https://www.nesdev.org/wiki/PPU_registers#PPUMASK
  */
 static inline bool PpuRenderingEnabled(const LuCNesPPU* ppu)
 {
     const uint16_t currentDot = ppu->render.lastDot;
+    const bool enabled = ppu->reg->mask & PPU_RENDERING_ENABLED;
 
-    if (likely(!ppu->render.rendToggleDot) || currentDot - ppu->render.rendToggleDot > 3)
-        return ppu->reg->mask & PPU_RENDERING_ENABLED;
+    if (likely(!ppu->render.rendToggleDot || currentDot >= ToggleEffectiveDot(ppu)))
+        return enabled;
 
     LogPrintDbg("Rendering toggle suppressed. Delay: %d\n", currentDot - ppu->render.rendToggleDot);
 
-    return !(ppu->reg->mask & PPU_RENDERING_ENABLED);
+    return !enabled;
 }
 
 static inline void SpriteZeroHitUpdate(LuCNesPPU* ppu, uint8_t pixelX)
@@ -455,6 +463,10 @@ void PpuVisibleLineRender(LuCNesPPU* ppu)
         switch (ppu->render.lastDot) {
             case PPU_RENDER_TILE_PIXELS: {
                 uint16_t nextCycleStage = MIN(PPU_RENDER_INC_Y, ppu->dot);
+
+                if (unlikely(ppu->render.rendToggleDot) &&
+                    ppu->render.lastDot < ToggleEffectiveDot(ppu))
+                    nextCycleStage = MIN(nextCycleStage, ToggleEffectiveDot(ppu));
 
                 if (likely(PpuRenderingEnabled(ppu))) {
                     const uint8_t endTileX = DIV_ROUND_UP(nextCycleStage, PPU_TILE_COLUMN_NUM);
