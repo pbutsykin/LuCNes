@@ -54,9 +54,6 @@
 #define VFLAG_ADD(_A, _VAL, _SUB) \
     VFLAG_CPU_CHECK(_A, _VAL, _SUB)
 
-#define VFLAG_SUB(_A, _VAL, _SUB) \
-    VFLAG_CPU_CHECK(_SUB, _VAL, _A)
-
 #define PAGE_CROSS_MASK 0xff00 /* Page size = 0xff */
 
 static inline bool PageCrossing(const uint16_t addr1, const uint16_t addr2)
@@ -235,16 +232,9 @@ static inline void cpn_base(CpuReg* reg, uint8_t val, uint8_t n)
     FLAG_UPDATE(reg->P, ZFLAG, sub);
 }
 
-static inline void sbc_base(CpuReg* reg, uint8_t val) /* XXX: optimize */
+static inline void sbc_base(CpuReg* reg, uint8_t val)
 {
-    uint8_t cflag = IS_FLAG(reg->P, CFLAG);
-    uint8_t sub = reg->A - val - !cflag;
-
-    FLAG_UPDATE(reg->P, VFLAG, VFLAG_SUB(reg->A, val, sub)); /* maybe need consider the CFLAG */
-    FLAG_UPDATE(reg->P, CFLAG, reg->A >= val + !cflag); /* perhaps remove the cflag stack var? */
-    FLAG_UPDATE(reg->P, NFLAG, sub);
-    FLAG_UPDATE(reg->P, ZFLAG, sub);
-    reg->A = sub;
+    adc_base(reg, ~val);
 }
 
 static inline void inc_base(CpuReg* reg, MMap* mmap, uint16_t addr)
