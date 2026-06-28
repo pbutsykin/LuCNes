@@ -102,6 +102,15 @@ static inline uint16_t ZeroPageRead16(MMap* mmap, uint8_t addr)
     return CpuMemRead16(mmap, addr);
 }
 
+static inline uint8_t PageCrossRead8(MMap* mmap, uint16_t base, uint8_t idx)
+{
+    uint16_t addr = base + idx;
+
+    if (unlikely(PageCrossing(base, addr)))
+        CpuDummyCycle(mmap);
+    return CpuMemRead8(mmap, addr);
+}
+
 /* Base instruction implementation */
 static inline void ora_base(CpuReg* reg, uint8_t val)
 {
@@ -399,12 +408,7 @@ static inline uint8_t bpl(CpuReg* reg, MMap* mmap)
 static inline void ora_iy(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = ZeroPageRead16(mmap, CpuMemRead8(mmap, reg->PC++));
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-
-    ora_base(reg, CpuMemRead8(mmap, addr));
+    ora_base(reg, PageCrossRead8(mmap, base, reg->Y));
 }
 
 static inline void slo_iy(CpuReg* reg, MMap* mmap)
@@ -446,11 +450,7 @@ static inline void clc(CpuReg* reg, MMap* mmap __maybe_unused)
 static inline void ora_ay(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    ora_base(reg, CpuMemRead8(mmap, addr));
+    ora_base(reg, PageCrossRead8(mmap, base, reg->Y));
     reg->PC += 2;
 }
 
@@ -478,11 +478,7 @@ static inline uint8_t nop6(CpuReg* reg, MMap* mmap)
 static inline void ora_ax(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->X;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    ora_base(reg, CpuMemRead8(mmap, addr));
+    ora_base(reg, PageCrossRead8(mmap, base, reg->X));
     reg->PC += 2;
 }
 
@@ -613,10 +609,7 @@ static inline uint8_t bmi(CpuReg* reg, MMap* mmap)
 static inline void and_iy(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = ZeroPageRead16(mmap, CpuMemRead8(mmap, reg->PC++));
-    uint16_t addr = base + reg->Y;
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    and_base(reg, CpuMemRead8(mmap, addr));
+    and_base(reg, PageCrossRead8(mmap, base, reg->Y));
 }
 
 static inline void rla_iy(CpuReg* reg, MMap* mmap)
@@ -653,11 +646,7 @@ static inline void sec(CpuReg* reg, MMap* mmap __maybe_unused)
 static inline void and_ay(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    and_base(reg, CpuMemRead8(mmap, addr));
+    and_base(reg, PageCrossRead8(mmap, base, reg->Y));
     reg->PC += 2;
 }
 
@@ -672,11 +661,7 @@ static inline void rla_ay(CpuReg* reg, MMap* mmap)
 static inline void and_ax(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->X;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    and_base(reg, CpuMemRead8(mmap, addr));
+    and_base(reg, PageCrossRead8(mmap, base, reg->X));
     reg->PC += 2;
 }
 
@@ -801,11 +786,7 @@ static inline uint8_t bvc(CpuReg* reg, MMap* mmap)
 static inline void eor_iy(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = ZeroPageRead16(mmap, CpuMemRead8(mmap, reg->PC++));
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    eor_base(reg, CpuMemRead8(mmap, addr));
+    eor_base(reg, PageCrossRead8(mmap, base, reg->Y));
 }
 
 static inline void sre_iy(CpuReg* reg, MMap* mmap)
@@ -839,11 +820,7 @@ static inline void sre_zx(CpuReg* reg, MMap* mmap)
 static inline void eor_ay(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    eor_base(reg, CpuMemRead8(mmap, addr));
+    eor_base(reg, PageCrossRead8(mmap, base, reg->Y));
     reg->PC += 2;
 }
 
@@ -858,11 +835,7 @@ static inline void sre_ay(CpuReg* reg, MMap* mmap)
 static inline void eor_ax(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->X;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    eor_base(reg, CpuMemRead8(mmap, addr));
+    eor_base(reg, PageCrossRead8(mmap, base, reg->X));
     reg->PC += 2;
 }
 
@@ -986,11 +959,7 @@ static inline uint8_t bvs(CpuReg* reg, MMap* mmap)
 static inline void adc_iy(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = ZeroPageRead16(mmap, CpuMemRead8(mmap, reg->PC++));
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    adc_base(reg, CpuMemRead8(mmap, addr));
+    adc_base(reg, PageCrossRead8(mmap, base, reg->Y));
 }
 
 static inline void rra_iy(CpuReg* reg, MMap* mmap)
@@ -1032,11 +1001,7 @@ static inline void sei(CpuReg* reg, MMap* mmap __maybe_unused)
 static inline void adc_ay(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    adc_base(reg, CpuMemRead8(mmap, addr));
+    adc_base(reg, PageCrossRead8(mmap, base, reg->Y));
     reg->PC += 2;
 }
 
@@ -1051,11 +1016,7 @@ static inline void rra_ay(CpuReg* reg, MMap* mmap)
 static inline void adc_ax(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->X;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    adc_base(reg, CpuMemRead8(mmap, addr));
+    adc_base(reg, PageCrossRead8(mmap, base, reg->X));
     reg->PC += 2;
 }
 
@@ -1407,11 +1368,7 @@ static inline uint8_t bcs(CpuReg* reg, MMap* mmap)
 static inline void lda_iy(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = ZeroPageRead16(mmap, CpuMemRead8(mmap, reg->PC++));
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    reg->A = ld_base(reg, CpuMemRead8(mmap, addr));
+    reg->A = ld_base(reg, PageCrossRead8(mmap, base, reg->Y));
 }
 
 static inline void lax_iy(CpuReg* reg, MMap* mmap)
@@ -1452,11 +1409,7 @@ static inline void clv(CpuReg* reg, MMap* mmap __maybe_unused)
 static inline void lda_ay(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    reg->A = ld_base(reg, CpuMemRead8(mmap, addr));
+    reg->A = ld_base(reg, PageCrossRead8(mmap, base, reg->Y));
     reg->PC += 2;
 }
 
@@ -1468,33 +1421,21 @@ static inline void tsx(CpuReg* reg, MMap* mmap __maybe_unused)
 static inline void ldy_ax(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->X;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    reg->Y = ld_base(reg, CpuMemRead8(mmap, addr));
+    reg->Y = ld_base(reg, PageCrossRead8(mmap, base, reg->X));
     reg->PC += 2;
 }
 
 static inline void lda_ax(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->X;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    reg->A = ld_base(reg, CpuMemRead8(mmap, addr));
+    reg->A = ld_base(reg, PageCrossRead8(mmap, base, reg->X));
     reg->PC += 2;
 }
 
 static inline void ldx_ay(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    reg->X = ld_base(reg, CpuMemRead8(mmap, addr));
+    reg->X = ld_base(reg, PageCrossRead8(mmap, base, reg->Y));
     reg->PC += 2;
 }
 
@@ -1512,11 +1453,7 @@ static inline uint8_t bne(CpuReg* reg, MMap* mmap)
 static inline void cmp_iy(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = ZeroPageRead16(mmap, CpuMemRead8(mmap, reg->PC++));
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    cmp_base(reg, CpuMemRead8(mmap, addr));
+    cmp_base(reg, PageCrossRead8(mmap, base, reg->Y));
 }
 
 static inline void dcp_iy(CpuReg* reg, MMap* mmap)
@@ -1552,11 +1489,7 @@ static inline void cld(CpuReg* reg, MMap* mmap __maybe_unused)
 static inline void cmp_ay(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    cmp_base(reg, CpuMemRead8(mmap, addr));
+    cmp_base(reg, PageCrossRead8(mmap, base, reg->Y));
     reg->PC += 2;
 }
 
@@ -1581,11 +1514,7 @@ static inline void dec_ax(CpuReg* reg, MMap* mmap)
 static inline void cmp_ax(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->X;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    cmp_base(reg, CpuMemRead8(mmap, addr));
+    cmp_base(reg, PageCrossRead8(mmap, base, reg->X));
     reg->PC += 2;
 }
 
@@ -1706,11 +1635,7 @@ static inline uint8_t beq(CpuReg* reg, MMap* mmap)
 static inline void sbc_iy(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = ZeroPageRead16(mmap, CpuMemRead8(mmap, reg->PC++));
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    sbc_base(reg, CpuMemRead8(mmap, addr));
+    sbc_base(reg, PageCrossRead8(mmap, base, reg->Y));
 }
 
 static inline void isb_iy(CpuReg* reg, MMap* mmap)
@@ -1757,11 +1682,7 @@ static inline void sed(CpuReg* reg, MMap* mmap __maybe_unused)
 static inline void sbc_ay(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->Y;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    sbc_base(reg, CpuMemRead8(mmap, addr));
+    sbc_base(reg, PageCrossRead8(mmap, base, reg->Y));
     reg->PC += 2;
 }
 
@@ -1783,11 +1704,7 @@ static inline void isb_ay(CpuReg* reg, MMap* mmap)
 static inline void sbc_ax(CpuReg* reg, MMap* mmap)
 {
     uint16_t base = CpuMemRead16(mmap, reg->PC);
-    uint16_t addr = base + reg->X;
-
-    if (unlikely(PageCrossing(base, addr)))
-        CpuDummyCycle(mmap);
-    sbc_base(reg, CpuMemRead8(mmap, addr));
+    sbc_base(reg, PageCrossRead8(mmap, base, reg->X));
     reg->PC += 2;
 }
 
