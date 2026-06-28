@@ -205,15 +205,6 @@ static inline uint8_t ld_base(CpuReg* reg, uint8_t val)
     return val;
 }
 
-static inline void cmp_base(CpuReg* reg, uint8_t val)
-{
-    uint8_t sub = reg->A - val;
-
-    FLAG_UPDATE(reg->P, CFLAG, reg->A >= val);
-    FLAG_UPDATE(reg->P, NFLAG, sub);
-    FLAG_UPDATE(reg->P, ZFLAG, sub);
-}
-
 static inline void dec_base(CpuReg* reg, MMap* mmap, uint16_t addr)
 {
     uint8_t val = CpuMemRead8(mmap, addr) - 1;
@@ -235,6 +226,11 @@ static inline void cpn_base(CpuReg* reg, uint8_t val, uint8_t n)
 static inline void sbc_base(CpuReg* reg, uint8_t val)
 {
     adc_base(reg, ~val);
+}
+
+static inline void cmp_base(CpuReg* reg, uint8_t val)
+{
+    cpn_base(reg, val, reg->A);
 }
 
 static inline void inc_base(CpuReg* reg, MMap* mmap, uint16_t addr)
