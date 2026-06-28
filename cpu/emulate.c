@@ -176,11 +176,11 @@ static inline void eor_base(CpuReg* reg, uint8_t val)
 
 static inline void adc_base(CpuReg* reg, uint8_t val)
 {
-    uint8_t cflag = IS_FLAG(reg->P, CFLAG);
-    uint8_t add = reg->A + val + cflag;
+    unsigned sum = reg->A + val + IS_FLAG(reg->P, CFLAG);
+    uint8_t add = sum;
 
     FLAG_UPDATE(reg->P, VFLAG, VFLAG_ADD(reg->A, val, add));
-    FLAG_UPDATE(reg->P, CFLAG, reg->A > add - cflag);
+    FLAG_UPDATE_OWN_CMP(reg->P, CFLAG, sum & 0x100);
     FLAG_UPDATE(reg->P, NFLAG, add);
     FLAG_UPDATE(reg->P, ZFLAG, add);
     reg->A = add;
