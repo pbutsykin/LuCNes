@@ -939,9 +939,7 @@ static inline void rra_z(CpuReg* reg, MMap* mmap)
 
 static inline void pla(CpuReg* reg, MMap* mmap)
 {
-    reg->A = pop8(reg, mmap);
-    FLAG_UPDATE(reg->P, NFLAG, reg->A);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->A);
+    reg->A = ld_base(reg, pop8(reg, mmap));
 }
 
 static inline void adc_c(CpuReg* reg, MMap* mmap)
@@ -1137,16 +1135,12 @@ static inline void sax_z(CpuReg* reg, MMap* mmap)
 
 static inline void dey(CpuReg* reg, MMap* mmap __maybe_unused)
 {
-    reg->Y--;
-    FLAG_UPDATE(reg->P, NFLAG, reg->Y);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->Y);
+    reg->Y = ld_base(reg, reg->Y - 1);
 }
 
 static inline void txa(CpuReg* reg, MMap* mmap __maybe_unused)
 {
-    reg->A = reg->X;
-    FLAG_UPDATE(reg->P, NFLAG, reg->A);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->A);
+    reg->A = ld_base(reg, reg->X);
 }
 
 static inline void sty_a(CpuReg* reg, MMap* mmap)
@@ -1213,9 +1207,7 @@ static inline void sax_zy(CpuReg* reg, MMap* mmap)
 
 static inline void tya(CpuReg* reg, MMap* mmap __maybe_unused)
 {
-    reg->A = reg->Y;
-    FLAG_UPDATE(reg->P, NFLAG, reg->A);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->A);
+    reg->A = ld_base(reg, reg->Y);
 }
 
 static inline void sta_ay(CpuReg* reg, MMap* mmap)
@@ -1290,9 +1282,7 @@ static inline void lax_z(CpuReg* reg, MMap* mmap)
 
 static inline void tay(CpuReg* reg, MMap* mmap __maybe_unused)
 {
-    reg->Y = reg->A;
-    FLAG_UPDATE(reg->P, NFLAG, reg->Y);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->Y);
+    reg->Y = ld_base(reg, reg->A);
 }
 
 static inline void lda_c(CpuReg* reg, MMap* mmap)
@@ -1302,9 +1292,7 @@ static inline void lda_c(CpuReg* reg, MMap* mmap)
 
 static inline void tax(CpuReg* reg, MMap* mmap __maybe_unused)
 {
-    reg->X = reg->A;
-    FLAG_UPDATE(reg->P, NFLAG, reg->X);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->X);
+    reg->X = ld_base(reg, reg->A);
 }
 
 static inline void ldy_a(CpuReg* reg, MMap* mmap)
@@ -1378,9 +1366,7 @@ static inline void dcp_z(CpuReg* reg, MMap* mmap)
 
 static inline void iny(CpuReg* reg, MMap* mmap __maybe_unused)
 {
-    reg->Y++;
-    FLAG_UPDATE(reg->P, NFLAG, reg->Y);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->Y);
+    reg->Y = ld_base(reg, reg->Y + 1);
 }
 
 static inline void cmp_c(CpuReg* reg, MMap* mmap)
@@ -1396,9 +1382,7 @@ static inline void cmp_a(CpuReg* reg, MMap* mmap)
 
 static inline void dex(CpuReg* reg, MMap* mmap __maybe_unused)
 {
-    reg->X--;
-    FLAG_UPDATE(reg->P, NFLAG, reg->X);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->X);
+    reg->X = ld_base(reg, reg->X - 1);
 }
 
 static inline void cpy_a(CpuReg* reg, MMap* mmap)
@@ -1482,9 +1466,7 @@ static inline void lda_ay(CpuReg* reg, MMap* mmap)
 
 static inline void tsx(CpuReg* reg, MMap* mmap __maybe_unused)
 {
-    reg->X = reg->S;
-    FLAG_UPDATE(reg->P, NFLAG, reg->X);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->X);
+    reg->X = ld_base(reg, reg->S);
 }
 
 static inline void ldy_ax(CpuReg* reg, MMap* mmap)
@@ -1677,9 +1659,7 @@ static inline void isb_z(CpuReg* reg, MMap* mmap)
 
 static inline void inx(CpuReg* reg, MMap* mmap __maybe_unused)
 {
-    reg->X++;
-    FLAG_UPDATE(reg->P, NFLAG, reg->X);
-    FLAG_UPDATE(reg->P, ZFLAG, reg->X);
+    reg->X = ld_base(reg, reg->X + 1);
 }
 
 static inline void sbc_c(CpuReg* reg, MMap* mmap)
