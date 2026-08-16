@@ -120,11 +120,18 @@ static inline uint16_t IndirectXAddr(CpuReg* reg, MMap* mmap)
     return ZeroPageRead16(mmap, offs);
 }
 
-static inline uint16_t AbsoluteIndexedAddr(CpuReg* reg, MMap* mmap, uint8_t idx)
+static inline uint16_t AbsoluteAddr(CpuReg* reg, MMap* mmap)
 {
-    uint16_t addr = CpuMemRead16(mmap, reg->PC) + idx;
+    uint16_t addr = CpuMemRead16(mmap, reg->PC);
 
     reg->PC += 2;
+    return addr;
+}
+
+static inline uint16_t AbsoluteIndexedAddr(CpuReg* reg, MMap* mmap, uint8_t idx)
+{
+    uint16_t addr = AbsoluteAddr(reg, mmap) + idx;
+
     CpuDummyCycle(mmap);
     return addr;
 }
@@ -389,25 +396,21 @@ static inline void nop3(CpuReg* reg __maybe_unused, MMap* mmap __maybe_unused)
 
 static inline void ora_a(CpuReg* reg, MMap* mmap)
 {
-    ora_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    ora_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void asl_a(CpuReg* reg, MMap* mmap)
 {
-    uint16_t addr = CpuMemRead16(mmap, reg->PC);
+    uint16_t addr = AbsoluteAddr(reg, mmap);
     uint8_t val = asl_base(reg, CpuMemRead8(mmap, addr));
 
     CpuDummyCycle(mmap);
     CpuMemWrite8(mmap, addr, val);
-
-    reg->PC += 2;
 }
 
 static inline void slo_a(CpuReg* reg, MMap* mmap)
 {
-    slo_base(reg, mmap, CpuMemRead16(mmap, reg->PC));
-    reg->PC += 2;
+    slo_base(reg, mmap, AbsoluteAddr(reg, mmap));
 }
 
 static inline uint8_t bpl(CpuReg* reg, MMap* mmap)
@@ -459,9 +462,7 @@ static inline void clc(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void ora_ay(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    ora_base(reg, PageCrossRead8(mmap, base, reg->Y));
-    reg->PC += 2;
+    ora_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->Y));
 }
 
 static inline void slo_ay(CpuReg* reg, MMap* mmap)
@@ -484,9 +485,7 @@ static inline uint8_t nop6(CpuReg* reg, MMap* mmap)
 
 static inline void ora_ax(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    ora_base(reg, PageCrossRead8(mmap, base, reg->X));
-    reg->PC += 2;
+    ora_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->X));
 }
 
 static inline void asl_ax(CpuReg* reg, MMap* mmap)
@@ -563,31 +562,26 @@ static inline void rol(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void bit_a(CpuReg* reg, MMap* mmap)
 {
-    bit_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    bit_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void and_a(CpuReg* reg, MMap* mmap)
 {
-    and_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    and_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void rol_a(CpuReg* reg, MMap* mmap)
 {
-    uint16_t addr = CpuMemRead16(mmap, reg->PC);
+    uint16_t addr = AbsoluteAddr(reg, mmap);
     uint8_t val = rol_base(reg, CpuMemRead8(mmap, addr));
 
     CpuDummyCycle(mmap);
     CpuMemWrite8(mmap, addr, val);
-
-    reg->PC += 2;
 }
 
 static inline void rla_a(CpuReg* reg, MMap* mmap)
 {
-    rla_base(reg, mmap, CpuMemRead16(mmap, reg->PC));
-    reg->PC += 2;
+    rla_base(reg, mmap, AbsoluteAddr(reg, mmap));
 }
 
 static inline uint8_t bmi(CpuReg* reg, MMap* mmap)
@@ -634,9 +628,7 @@ static inline void sec(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void and_ay(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    and_base(reg, PageCrossRead8(mmap, base, reg->Y));
-    reg->PC += 2;
+    and_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->Y));
 }
 
 static inline void rla_ay(CpuReg* reg, MMap* mmap)
@@ -646,9 +638,7 @@ static inline void rla_ay(CpuReg* reg, MMap* mmap)
 
 static inline void and_ax(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    and_base(reg, PageCrossRead8(mmap, base, reg->X));
-    reg->PC += 2;
+    and_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->X));
 }
 
 static inline void rol_ax(CpuReg* reg, MMap* mmap)
@@ -724,25 +714,21 @@ static inline void jmp(CpuReg* reg, MMap* mmap)
 
 static inline void eor_a(CpuReg* reg, MMap* mmap)
 {
-    eor_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    eor_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void lsr_a(CpuReg* reg, MMap* mmap)
 {
-    uint16_t addr = CpuMemRead16(mmap, reg->PC);
+    uint16_t addr = AbsoluteAddr(reg, mmap);
     uint8_t val = lsr_base(reg, CpuMemRead8(mmap, addr));
 
     CpuDummyCycle(mmap);
     CpuMemWrite8(mmap, addr, val);
-
-    reg->PC += 2;
 }
 
 static inline void sre_a(CpuReg* reg, MMap* mmap)
 {
-    sre_base(reg, mmap, CpuMemRead16(mmap, reg->PC));
-    reg->PC += 2;
+    sre_base(reg, mmap, AbsoluteAddr(reg, mmap));
 }
 
 static inline uint8_t bvc(CpuReg* reg, MMap* mmap)
@@ -786,9 +772,7 @@ static inline void sre_zx(CpuReg* reg, MMap* mmap)
 
 static inline void eor_ay(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    eor_base(reg, PageCrossRead8(mmap, base, reg->Y));
-    reg->PC += 2;
+    eor_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->Y));
 }
 
 static inline void sre_ay(CpuReg* reg, MMap* mmap)
@@ -798,9 +782,7 @@ static inline void sre_ay(CpuReg* reg, MMap* mmap)
 
 static inline void eor_ax(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    eor_base(reg, PageCrossRead8(mmap, base, reg->X));
-    reg->PC += 2;
+    eor_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->X));
 }
 
 static inline void lsr_ax(CpuReg* reg, MMap* mmap)
@@ -877,25 +859,21 @@ static inline void jmp_i(CpuReg* reg, MMap* mmap)
 
 static inline void adc_a(CpuReg* reg, MMap* mmap)
 {
-    adc_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    adc_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void ror_a(CpuReg* reg, MMap* mmap)
 {
-    uint16_t addr = CpuMemRead16(mmap, reg->PC);
+    uint16_t addr = AbsoluteAddr(reg, mmap);
     uint8_t val = ror_base(reg, CpuMemRead8(mmap, addr));
 
     CpuDummyCycle(mmap);
     CpuMemWrite8(mmap, addr, val);
-
-    reg->PC += 2;
 }
 
 static inline void rra_a(CpuReg* reg, MMap* mmap)
 {
-    rra_base(reg, mmap, CpuMemRead16(mmap, reg->PC));
-    reg->PC += 2;
+    rra_base(reg, mmap, AbsoluteAddr(reg, mmap));
 }
 
 static inline uint8_t bvs(CpuReg* reg, MMap* mmap)
@@ -947,9 +925,7 @@ static inline void sei(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void adc_ay(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    adc_base(reg, PageCrossRead8(mmap, base, reg->Y));
-    reg->PC += 2;
+    adc_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->Y));
 }
 
 static inline void rra_ay(CpuReg* reg, MMap* mmap)
@@ -959,9 +935,7 @@ static inline void rra_ay(CpuReg* reg, MMap* mmap)
 
 static inline void adc_ax(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    adc_base(reg, PageCrossRead8(mmap, base, reg->X));
-    reg->PC += 2;
+    adc_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->X));
 }
 
 static inline void ror_ax(CpuReg* reg, MMap* mmap)
@@ -1028,27 +1002,23 @@ static inline void txa(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void sty_a(CpuReg* reg, MMap* mmap)
 {
-    CpuMemWrite8(mmap, CpuMemRead16(mmap, reg->PC), reg->Y);
-    reg->PC += 2;
+    CpuMemWrite8(mmap, AbsoluteAddr(reg, mmap), reg->Y);
 }
 
 static inline void sta_a(CpuReg* reg, MMap* mmap)
 {
-    CpuMemWrite8(mmap, CpuMemRead16(mmap, reg->PC), reg->A);
-    reg->PC += 2;
+    CpuMemWrite8(mmap, AbsoluteAddr(reg, mmap), reg->A);
 }
 
 static inline void stx_a(CpuReg* reg, MMap* mmap)
 {
-    CpuMemWrite8(mmap, CpuMemRead16(mmap, reg->PC), reg->X);
-    reg->PC += 2;
+    CpuMemWrite8(mmap, AbsoluteAddr(reg, mmap), reg->X);
 }
 
 static inline void sax_a(CpuReg* reg, MMap* mmap)
 {
     uint8_t val = reg->A & reg->X;
-    CpuMemWrite8(mmap, CpuMemRead16(mmap, reg->PC), val);
-    reg->PC += 2;
+    CpuMemWrite8(mmap, AbsoluteAddr(reg, mmap), val);
 }
 
 static inline uint8_t bcc(CpuReg* reg, MMap* mmap)
@@ -1168,20 +1138,17 @@ static inline void tax(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void ldy_a(CpuReg* reg, MMap* mmap)
 {
-    reg->Y = ld_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    reg->Y = ld_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void lda_a(CpuReg* reg, MMap* mmap)
 {
-    reg->A = ld_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    reg->A = ld_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void ldx_a(CpuReg* reg, MMap* mmap)
 {
-    reg->X = ld_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    reg->X = ld_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void lax_a(CpuReg* reg, MMap* mmap)
@@ -1237,8 +1204,7 @@ static inline void cmp_c(CpuReg* reg, MMap* mmap)
 
 static inline void cmp_a(CpuReg* reg, MMap* mmap)
 {
-    cmp_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    cmp_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void dex(CpuReg* reg, MMap* mmap __maybe_unused)
@@ -1248,20 +1214,17 @@ static inline void dex(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void cpy_a(CpuReg* reg, MMap* mmap)
 {
-    cpn_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)), reg->Y);
-    reg->PC += 2;
+    cpn_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)), reg->Y);
 }
 
 static inline void dec_a(CpuReg* reg, MMap* mmap)
 {
-    dec_base(reg, mmap, CpuMemRead16(mmap, reg->PC));
-    reg->PC += 2;
+    dec_base(reg, mmap, AbsoluteAddr(reg, mmap));
 }
 
 static inline void dcp_a(CpuReg* reg, MMap* mmap)
 {
-    dcp_base(reg, mmap, CpuMemRead16(mmap, reg->PC));
-    reg->PC += 2;
+    dcp_base(reg, mmap, AbsoluteAddr(reg, mmap));
 }
 
 static inline uint8_t bcs(CpuReg* reg, MMap* mmap)
@@ -1312,9 +1275,7 @@ static inline void clv(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void lda_ay(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    reg->A = ld_base(reg, PageCrossRead8(mmap, base, reg->Y));
-    reg->PC += 2;
+    reg->A = ld_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->Y));
 }
 
 static inline void tsx(CpuReg* reg, MMap* mmap __maybe_unused)
@@ -1324,23 +1285,17 @@ static inline void tsx(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void ldy_ax(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    reg->Y = ld_base(reg, PageCrossRead8(mmap, base, reg->X));
-    reg->PC += 2;
+    reg->Y = ld_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->X));
 }
 
 static inline void lda_ax(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    reg->A = ld_base(reg, PageCrossRead8(mmap, base, reg->X));
-    reg->PC += 2;
+    reg->A = ld_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->X));
 }
 
 static inline void ldx_ay(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    reg->X = ld_base(reg, PageCrossRead8(mmap, base, reg->Y));
-    reg->PC += 2;
+    reg->X = ld_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->Y));
 }
 
 static inline void lax_ay(CpuReg* reg, MMap* mmap)
@@ -1392,9 +1347,7 @@ static inline void cld(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void cmp_ay(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    cmp_base(reg, PageCrossRead8(mmap, base, reg->Y));
-    reg->PC += 2;
+    cmp_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->Y));
 }
 
 static inline void dcp_ay(CpuReg* reg, MMap* mmap)
@@ -1409,9 +1362,7 @@ static inline void dec_ax(CpuReg* reg, MMap* mmap)
 
 static inline void cmp_ax(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    cmp_base(reg, PageCrossRead8(mmap, base, reg->X));
-    reg->PC += 2;
+    cmp_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->X));
 }
 
 static inline void dcp_ax(CpuReg* reg, MMap* mmap)
@@ -1481,32 +1432,27 @@ static inline void nop(CpuReg* reg __maybe_unused, MMap* mmap __maybe_unused)
 
 static inline void cpx_a(CpuReg* reg, MMap* mmap)
 {
-    cpn_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)), reg->X);
-    reg->PC += 2;
+    cpn_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)), reg->X);
 }
 
 static inline void inc_a(CpuReg* reg, MMap* mmap)
 {
-    inc_base(reg, mmap, CpuMemRead16(mmap, reg->PC));
-    reg->PC += 2;
+    inc_base(reg, mmap, AbsoluteAddr(reg, mmap));
 }
 
 static inline void sbc_a(CpuReg* reg, MMap* mmap)
 {
-    sbc_base(reg, CpuMemRead8(mmap, CpuMemRead16(mmap, reg->PC)));
-    reg->PC += 2;
+    sbc_base(reg, CpuMemRead8(mmap, AbsoluteAddr(reg, mmap)));
 }
 
 static inline void isb_a(CpuReg* reg, MMap* mmap)
 {
-    uint16_t addr = CpuMemRead16(mmap, reg->PC);
+    uint16_t addr = AbsoluteAddr(reg, mmap);
     uint8_t val = CpuMemRead8(mmap, addr) + 1;
 
     CpuDummyCycle(mmap);
     CpuMemWrite8(mmap, addr, val);
     sbc_base(reg, val);
-
-    reg->PC += 2;
 }
 
 static inline uint8_t beq(CpuReg* reg, MMap* mmap)
@@ -1563,9 +1509,7 @@ static inline void sed(CpuReg* reg, MMap* mmap __maybe_unused)
 
 static inline void sbc_ay(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    sbc_base(reg, PageCrossRead8(mmap, base, reg->Y));
-    reg->PC += 2;
+    sbc_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->Y));
 }
 
 static inline void isb_ay(CpuReg* reg, MMap* mmap)
@@ -1580,9 +1524,7 @@ static inline void isb_ay(CpuReg* reg, MMap* mmap)
 
 static inline void sbc_ax(CpuReg* reg, MMap* mmap)
 {
-    uint16_t base = CpuMemRead16(mmap, reg->PC);
-    sbc_base(reg, PageCrossRead8(mmap, base, reg->X));
-    reg->PC += 2;
+    sbc_base(reg, PageCrossRead8(mmap, AbsoluteAddr(reg, mmap), reg->X));
 }
 
 static inline void inc_ax(CpuReg* reg, MMap* mmap)
