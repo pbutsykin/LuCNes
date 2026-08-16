@@ -111,6 +111,15 @@ static inline uint8_t PageCrossRead8(MMap* mmap, uint16_t base, uint8_t idx)
     return CpuMemRead8(mmap, addr);
 }
 
+/* (zp,X) pre-indexed indirect */
+static inline uint16_t IndirectXAddr(CpuReg* reg, MMap* mmap)
+{
+    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
+
+    CpuDummyCycle(mmap);
+    return ZeroPageRead16(mmap, offs);
+}
+
 /* Base instruction implementation */
 static inline void ora_base(CpuReg* reg, uint8_t val)
 {
@@ -318,20 +327,12 @@ static inline void rra_base(CpuReg* reg, MMap* mmap, uint16_t addr)
 /* Final instruction implementation */
 static inline void ora_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    ora_base(reg, CpuMemRead8(mmap, addr));
+    ora_base(reg, CpuMemRead8(mmap, IndirectXAddr(reg, mmap)));
 }
 
 static inline void slo_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-
-    CpuDummyCycle(mmap);
-    slo_base(reg, mmap, ZeroPageRead16(mmap, offs));
+    slo_base(reg, mmap, IndirectXAddr(reg, mmap));
 }
 
 static inline void nop2(CpuReg* reg __maybe_unused, MMap* mmap __maybe_unused)
@@ -515,22 +516,12 @@ static inline void jsr(CpuReg* reg, MMap* mmap)
 
 static inline void and_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    and_base(reg, CpuMemRead8(mmap, addr));
+    and_base(reg, CpuMemRead8(mmap, IndirectXAddr(reg, mmap)));
 }
 
 static inline void rla_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    rla_base(reg, mmap, addr);
+    rla_base(reg, mmap, IndirectXAddr(reg, mmap));
 }
 
 static inline void bit_z(CpuReg* reg, MMap* mmap)
@@ -699,23 +690,12 @@ static inline void rti(CpuReg* reg, MMap* mmap)
 
 static inline void eor_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    eor_base(reg, CpuMemRead8(mmap, addr));
-    /* Always constant cycles (6) */
+    eor_base(reg, CpuMemRead8(mmap, IndirectXAddr(reg, mmap)));
 }
 
 static inline void sre_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    sre_base(reg, mmap, addr);
+    sre_base(reg, mmap, IndirectXAddr(reg, mmap));
 }
 
 static inline void lsr_z(CpuReg* reg, MMap* mmap)
@@ -871,22 +851,12 @@ static inline void rts(CpuReg* reg, MMap* mmap)
 
 static inline void adc_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    adc_base(reg, CpuMemRead8(mmap, addr));
+    adc_base(reg, CpuMemRead8(mmap, IndirectXAddr(reg, mmap)));
 }
 
 static inline void rra_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    rra_base(reg, mmap, addr);
+    rra_base(reg, mmap, IndirectXAddr(reg, mmap));
 }
 
 static inline void adc_z(CpuReg* reg, MMap* mmap)
@@ -1048,25 +1018,14 @@ static inline void nop5(CpuReg* reg __maybe_unused, MMap* mmap __maybe_unused)
 
 static inline void sta_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-
-    CpuMemWrite8(mmap, addr, reg->A);
+    CpuMemWrite8(mmap, IndirectXAddr(reg, mmap), reg->A);
 }
 
 static inline void sax_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
     uint8_t val = reg->A & reg->X;
 
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-
-    CpuMemWrite8(mmap, addr, val);
+    CpuMemWrite8(mmap, IndirectXAddr(reg, mmap), val);
 }
 
 static inline void sty_z(CpuReg* reg, MMap* mmap)
@@ -1195,13 +1154,7 @@ static inline void ldy_c(CpuReg* reg, MMap* mmap)
 
 static inline void lda_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-
-    reg->A = ld_base(reg, CpuMemRead8(mmap, addr));
+    reg->A = ld_base(reg, CpuMemRead8(mmap, IndirectXAddr(reg, mmap)));
 }
 
 static inline void ldx_c(CpuReg* reg, MMap* mmap)
@@ -1283,22 +1236,12 @@ static inline void cpy_c(CpuReg* reg, MMap* mmap)
 
 static inline void cmp_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    cmp_base(reg, CpuMemRead8(mmap, addr));
+    cmp_base(reg, CpuMemRead8(mmap, IndirectXAddr(reg, mmap)));
 }
 
 static inline void dcp_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    dcp_base(reg, mmap, addr);
+    dcp_base(reg, mmap, IndirectXAddr(reg, mmap));
 }
 
 static inline void cpy_z(CpuReg* reg, MMap* mmap)
@@ -1534,23 +1477,13 @@ static inline void cpx_c(CpuReg* reg, MMap* mmap)
 
 static inline void sbc_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    sbc_base(reg, CpuMemRead8(mmap, addr));
+    sbc_base(reg, CpuMemRead8(mmap, IndirectXAddr(reg, mmap)));
 }
 
 static inline void isb_ix(CpuReg* reg, MMap* mmap)
 {
-    uint8_t offs = CpuMemRead8(mmap, reg->PC++) + reg->X;
-    uint16_t addr;
-    uint8_t val;
-
-    CpuDummyCycle(mmap);
-    addr = ZeroPageRead16(mmap, offs);
-    val = (int8_t)CpuMemRead8(mmap, addr) + 1;
+    uint16_t addr = IndirectXAddr(reg, mmap);
+    uint8_t val = (int8_t)CpuMemRead8(mmap, addr) + 1;
 
     CpuDummyCycle(mmap);
     CpuMemWrite8(mmap, addr, val);
