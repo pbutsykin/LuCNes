@@ -271,7 +271,7 @@ static inline void PpuRenderBgTile(LuCNesPPU* ppu, uint8_t y, uint8_t x, bool sp
         }
 
         const uint8_t shift = ~(fineX + x) & TILE_COLUMN_MASK;
-        const uint8_t bgColorIdx = unlikely(high | low) ? GetPixelColorIdx(high, low, shift) : 0;
+        const uint8_t bgColorIdx = GetPixelColorIdx(high, low, shift);
         if (unlikely(spEnabled)) {
             const PixelSpDataSet spPixel = { .byte = ppu->render.lineSprites[x] };
             if (likely(spPixel.byte)) {
