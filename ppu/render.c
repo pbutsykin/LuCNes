@@ -241,7 +241,10 @@ static inline PPUPalette GetBgTileData(const LuCNesPPU* ppu, VRAMAddrReg cur, ui
 
     *high = tile->high[cur.fineY];
     *low = tile->low[cur.fineY];
-    return *LookupBgPalette(ppu, getBgPaletteIdx(nt, ntIdx));
+
+    PPUPalette palette = *LookupBgPalette(ppu, getBgPaletteIdx(nt, ntIdx));
+    palette.colors[0] = ppu->mmap.paletteTable->uniBgColor;
+    return palette;
 }
 
 static inline void PpuRenderBackDropTile(const LuCNesPPU* ppu, uint8_t y, uint8_t x)
@@ -284,9 +287,7 @@ static inline void PpuRenderBgTile(LuCNesPPU* ppu, uint8_t y, uint8_t x, bool sp
                 }
             }
         }
-        const uint8_t bgValue = likely(bgColorIdx) ? bgPal.colors[bgColorIdx] :
-                                                     ppu->mmap.paletteTable->uniBgColor;
-        VideoSetPixel(ppu->video, y, x, bgValue & ppu->render.colorMask);
+        VideoSetPixel(ppu->video, y, x, bgPal.colors[bgColorIdx] & ppu->render.colorMask);
     }
 }
 
